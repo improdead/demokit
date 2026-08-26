@@ -1,6 +1,6 @@
 ---
 name: demo-video
-description: Plan and produce a polished product demo video by driving a browser — probe the app, decide what to prove, seed realistic data when the environment is empty, then record and edit it into an MP4 with a synthetic cursor, click-focused zoom and dead air compressed. Use when the user asks for a demo video, a product walkthrough, a screen recording of a flow, a clip to send customers or investors, or wants to show a feature working. Runs on demokit (capture + ffmpeg) through playwriter.
+description: Plan and produce a polished demo video of a web app, a CLI, or a native app — probe the target, decide what to prove, seed realistic data when the environment is empty, then record and edit it into an MP4 with a cursor, change-aware zoom, a real backdrop and dead air compressed, and measure the result against objective checks. Use when the user asks for a demo video, a product walkthrough, a screen or terminal recording, a clip to send customers or investors, or wants to show a feature or a command working. Runs on demokit (capture + ffmpeg); browser capture goes through playwriter, terminals are rendered offscreen.
 ---
 
 # Making a demo video
