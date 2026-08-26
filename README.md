@@ -111,9 +111,18 @@ viewport at DSF 2 still yields 1280×720 metadata), and raising the CSS viewport
 either, because the cap is on the stored image.
 
 The fix is to drive the screencast directly: `Page.startScreencast` with `format:'png'` and
-explicit `maxWidth`/`maxHeight`, acking each frame. That yields true 1920×1080 lossless PNGs.
-Per-frame timestamps go into the manifest, and the renderer feeds ffmpeg a concat list with real
-durations so wall-clock timing survives.
+explicit `maxWidth`/`maxHeight`, acking each frame. Per-frame timestamps go into the manifest, and
+the renderer feeds ffmpeg a concat list with real durations so wall-clock timing survives.
+
+**`Page.startScreencast` also captures CSS pixels and ignores `deviceScaleFactor`** —
+`Emulation.setDeviceMetricsOverride` with DSF 2 still yields 1280×720 frames (and Playwright
+re-applies its own metrics on navigate, wiping the override anyway). The way to get 2× pixels is a
+2× viewport plus `html{zoom:2}`: the page lays out as if it were 1280 wide but renders into
+2560×1440. `getBoundingClientRect` returns zoomed coordinates, so clicks stay 1:1 with frame pixels
+and need no rescaling.
+
+That combination also fixes what *looks* like blur but is really scale: a 680px content column in
+a 1920 viewport is tiny in frame, and small type reads as soft no matter how many pixels it has.
 
 ## Setup
 
@@ -147,5 +156,6 @@ vendor/          shallow clones: playwriter, playwright-recast, openscreen (refe
 - Redaction. Nothing blurs API keys or customer data yet.
 - A synthetic browser chrome bar (traffic lights + URL pill) above the content. A tab screencast
   has no browser UI, and the reference demos lean on it heavily.
-- Cursor path is reconstructed as an eased travel into each click rather than logged per-move.
+- Cursor path is reconstructed as an eased travel into each beat rather than logged per-move.
   Looks right, but a real path log would be truer.
+- The flow in `record.js` is hardcoded for this one site. It should be a data file.

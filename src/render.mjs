@@ -165,11 +165,14 @@ export function buildGraph({
 export async function render({ shotDir, output, assetDir, fps = 30, crf = 17, ...opts }) {
   mkdirSync(assetDir, { recursive: true });
   const man = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
-  const { width: srcW, height: srcH, clicks } = man;
+  const { width: srcW, height: srcH } = man;
+  // Frames are device pixels, click coords are CSS pixels.
+  const dsf = man.dsf ?? 1;
+  const clicks = man.clicks.map((c) => ({ ...c, x: c.x * dsf, y: c.y * dsf }));
   const outW = opts.outW ?? srcW, outH = opts.outH ?? srcH;
 
-  const cursorH = opts.cursorH ?? 52;
-  const rippleMax = 46;
+  const cursorH = opts.cursorH ?? Math.round(30 * dsf);
+  const rippleMax = Math.round(28 * dsf);
   const cursor = await makeCursor(assetDir, cursorH);
   const ripples = await makeRipples(assetDir, 7, rippleMax);
 
