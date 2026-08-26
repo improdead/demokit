@@ -97,27 +97,10 @@ export function buildGraph({
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize,
 }) {
   const parts = [];
-  // ---- page-space layer: cursor + click ripples ----------------------------
-  let cur = '[0:v]';
-  parts.push(`${cur}fps=${fps},scale=${srcW}:${srcH}[base]`);
-  cur = '[base]';
-
-  clicks.forEach((c, ci) => {
-    for (let r = 0; r < rippleCount; r++) {
-      const t0 = c.t / 1000 + r * 0.055;
-      const t1 = t0 + 0.06;
-      const idx = 2 + r; // inputs: 0 frames, 1 cursor, 2..N ripples
-      const out = `[rp${ci}_${r}]`;
-      parts.push(
-        `${cur}[${idx}:v]overlay=x=${Math.round(c.x - rippleSize / 2)}:y=${Math.round(c.y - rippleSize / 2)}` +
-        `:enable='between(t,${t0.toFixed(3)},${t1.toFixed(3)})'${out}`);
-      cur = out;
-    }
-  });
-
-  // cursor hotspot is the arrow tip, near the top-left of the sprite
-  const hx = Math.round(cursorH * 0.18), hy = Math.round(cursorH * 0.18);
-  parts.push(`${cur}[1:v]overlay=x='${pathExpr(clicks, 'x')}-${hx}':y='${pathExpr(clicks, 'y')}-${hy}'[withcur]`);
+  // Cursor and click pulses are already composited into the frames by
+  // src/cursor.py - it interpolates the dense pointer path per frame, which an
+  // ffmpeg overlay expression cannot do without encoding hundreds of samples.
+  parts.push(`[0:v]fps=${fps}[withcur]`);
 
   // ---- frame composite (at capture resolution) -----------------------------
   const compW = srcW, compH = srcH;
@@ -125,7 +108,7 @@ export function buildGraph({
   const fgH = even(Math.round(fgW * (srcH / srcW)));
   const ox = Math.round((compW - fgW) / 2);
   const oy = Math.round((compH - fgH) / 2);
-  const M = rippleCount + 2, S = rippleCount + 3; // mask, shadow input indices
+  const M = 1, S = 2; // inputs: 0 frames, 1 mask, 2 shadow
 
   parts.push(
     `[withcur]split=2[fga_src][bg_src]`,
@@ -184,11 +167,6 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const clicks = man.clicks.map((c) => ({ ...c, x: c.x * dsf, y: c.y * dsf }));
   const outW = opts.outW ?? srcW, outH = opts.outH ?? srcH;
 
-  const cursorH = opts.cursorH ?? Math.round(30 * dsf);
-  const rippleMax = Math.round(28 * dsf);
-  const cursor = await makeCursor(assetDir, cursorH);
-  const ripples = await makeRipples(assetDir, 7, rippleMax);
-
   const fgW = even(Math.round(srcW * (opts.inset ?? 0.8)));
   const fgH = even(Math.round(fgW * (srcH / srcW)));
   const { mask, shadow, pad } = await makeAssets({
@@ -197,20 +175,24 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
     shadowBlur: Math.round(22 * (srcW / 1920)), shadowDy: Math.round(14 * (srcW / 1920)),
   });
 
+  // prefer the cursor-composited frames when the cursor pass has run
+  const framesDir = existsSync(join(shotDir, 'frames-cur'))
+    ? join(shotDir, 'frames-cur') : join(shotDir, 'frames');
+
   // concat with real per-frame durations so wall-clock timing survives
   const list = man.frames.map((f, i) => {
     const next = man.frames[i + 1];
     const d = next ? Math.max(0.008, (next.ms - f.ms) / 1000) : 1 / fps;
-    return `file '${join(shotDir, 'frames', `f${String(f.i).padStart(5, '0')}.png`)}'\nduration ${d.toFixed(4)}`;
+    return `file '${join(framesDir, `f${String(f.i).padStart(5, '0')}.png`)}'\nduration ${d.toFixed(4)}`;
   });
   const last = man.frames[man.frames.length - 1];
-  list.push(`file '${join(shotDir, 'frames', `f${String(last.i).padStart(5, '0')}.png`)}'`);
+  list.push(`file '${join(framesDir, `f${String(last.i).padStart(5, '0')}.png`)}'`);
   const lp = join(assetDir, 'frames.txt');
   writeFileSync(lp, list.join('\n'));
 
   const graph = buildGraph({
     srcW, srcH, outW, outH, fps, clicks,
-    rippleCount: ripples.length, cursorH, pad, rippleSize: rippleMax * 2 + 8, ...opts,
+    pad, ...opts,
   });
   const gp = join(assetDir, 'graph.txt');
   writeFileSync(gp, graph);
@@ -218,7 +200,7 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const args = ['-y', '-hide_banner', '-loglevel', 'error',
     '-sws_flags', 'lanczos+accurate_rnd+full_chroma_int',
     '-f', 'concat', '-safe', '0', '-i', lp,
-    '-i', cursor, ...ripples.flatMap((r) => ['-i', r]), '-i', mask, '-i', shadow,
+    '-i', mask, '-i', shadow,
     '-filter_complex_script', gp, '-map', '[out]',
     '-c:v', 'libx264', '-preset', 'slower', '-crf', String(crf),
     '-x264-params', 'aq-mode=3:psy-rd=0.4:deblock=-1,-1',

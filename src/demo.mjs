@@ -8,6 +8,8 @@
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync, copyFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { render } from './render.mjs';
 import { pace } from './pace.mjs';
 
@@ -22,6 +24,12 @@ if (!shotArg || !outArg) {
 const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
 const shotDir = resolve(shotArg), outPath = resolve(outArg);
 const stage = join(ASSETS, 'stage.mp4');
+
+// Pass 1: draw the cursor and click pulses onto the frames from the dense
+// pointer path. Must happen before compositing so they scale with the window.
+const runp = promisify(execFile);
+const cur = await runp('python3', [join(HERE, 'cursor.py'), shotDir], { maxBuffer: 1 << 26 });
+process.stdout.write(cur.stdout);
 
 const r = await render({
   shotDir, output: stage, assetDir: ASSETS,

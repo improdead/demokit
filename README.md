@@ -7,11 +7,18 @@ dead air compressed. No captions.
 
 ```bash
 cd .tools && npm i && cd ..                 # vendored ffmpeg/ffprobe (no Homebrew needed)
+
+# IMPORTANT: create the session FROM this directory. playwriter's sandbox scopes
+# file writes to the session's cwd, so a session made elsewhere cannot write
+# frames here and relative flow paths won't resolve.
 playwriter session new --browser headless   # or use your real Chrome session
 
 DEMOKIT_FLOW=flows/example.json playwriter -s <id> -f src/record.js
 node src/demo.mjs .cache/shot out.mp4
 ```
+
+Three passes: `cursor.py` draws the pointer and click pulses onto the frames, `render.mjs`
+composites the framed shot and the zoom, `pace.mjs` compresses the dead air.
 
 ## Describing a flow
 
@@ -117,6 +124,34 @@ envelopes rather than a sum, so overlapping zooms don't compound.
 **Pacing runs last.** Zoom envelopes live in video time, so compressing first desynchronises every
 keyframe. Idle regions carry no envelope, which is why speeding them up afterwards is safe.
 
+## The cursor
+
+Two cursors, deliberately, and this is the part worth copying:
+
+- **Operating pointer** — resolve a semantic locator, take its bounding box, move and click through
+  CDP. Never guessed coordinates.
+- **Drawn pointer** — rendered at export from the logged path. Nothing about the real pointer is
+  ever captured; a headless screencast has no cursor at all.
+
+The subtlety is what gets logged. Recording only the *beats* and reconstructing an eased line
+between them looks fine until something is dragged: the page follows the real pointer while the
+drawn one takes a different route, and the cursor visibly detaches from the thing it is supposedly
+moving. `page.mouse.move({steps})` interpolates internally and reports nothing, so `record.js`
+does the interpolation itself and logs **every** intermediate position, including during drags and
+while dwelling.
+
+`cursor.py` then interpolates that path at each frame's own timestamp and composites the sprite
+with its tip on the exact point. Done in PIL rather than as an ffmpeg overlay because the path is
+hundreds of samples and an overlay expression would have to encode all of them as one nested
+`if()` chain.
+
+Click pulses come from the action log, so they fire on real presses only — a hover beat gets a zoom
+but no ripple. The sprite shrinks slightly between `down` and `up` so a drag reads as held.
+
+`record.js` also checks `document.elementFromPoint` after moving and warns when something with a
+higher z-index covers the target — which is exactly how the earlier "the drag selects text instead
+of grabbing" bug was found.
+
 ## Not using playwright-recast
 
 It was the starting point and is no longer used. Its `cursorOverlay` is fed from trace coordinates
@@ -129,8 +164,9 @@ the recorder's own beat log means there is exactly one cursor and it is always o
 
 ```
 flows/           flow definitions (JSON)
-src/record.js    capture: CDP PNG screencast + beat log (runs inside playwriter)
-src/render.mjs   cursor, ripples, frame, backdrop, zoom — one ffmpeg graph
+src/record.js    capture: CDP PNG screencast + dense pointer path (runs inside playwriter)
+src/cursor.py    draws cursor + click pulses onto the frames (per-frame, exact)
+src/render.mjs   frame, backdrop, shadow, zoom — one ffmpeg graph
 src/pace.mjs     idle speed-up (after zoom)
 src/demo.mjs     shot dir -> MP4
 vendor/          shallow clones kept for reference: playwriter, playwright-recast, openscreen
@@ -142,7 +178,6 @@ vendor/          shallow clones kept for reference: playwriter, playwright-recas
 
 - **No browser chrome.** A tab screencast has no traffic lights or URL bar; the reference demos
   lean on it. It would have to be drawn synthetically.
-- Cursor path is reconstructed as an eased travel into each beat rather than logged per move.
 - No redaction — nothing blurs API keys or customer data yet.
 - `chrome.tabCapture` (true 30fps, native res) needs the extension clicked on the tab, so headless
   runs can't use it.

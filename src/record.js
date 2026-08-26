@@ -77,8 +77,56 @@ await cdp.send('Page.startScreencast', { format: 'png', maxWidth: W, maxHeight: 
 
 const t0 = Date.now();
 const beats = [];
-const mark = (x, y, label) => beats.push({ x: Math.round(x), y: Math.round(y), t: Date.now() - t0, label: label });
+const path = [];      // EVERY pointer position, so the drawn cursor can follow
+const actions = [];   // presses/releases, for click pulses
+const now = () => Date.now() - t0;
+const mark = (x, y, label) => beats.push({ x: Math.round(x), y: Math.round(y), t: now(), label: label });
+const track = (x, y) => path.push({ x: Math.round(x), y: Math.round(y), t: now() });
+const act = (type, x, y, label) => actions.push({ type: type, x: Math.round(x), y: Math.round(y), t: now(), label: label });
 const centre = (b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+
+let curX = W / 2, curY = H / 2;
+track(curX, curY);
+
+/** Move the pointer ourselves so every intermediate position is logged.
+ *  page.mouse.move({steps}) interpolates internally and tells us nothing, which
+ *  is why the drawn cursor used to detach from whatever was being dragged. */
+async function glide(x, y, opts) {
+  opts = opts || {};
+  const steps = opts.steps ?? 26;
+  const perStep = opts.perStep ?? 12;
+  const x0 = curX, y0 = curY;
+  for (let i = 1; i <= steps; i++) {
+    const p = i / steps;
+    const e = p * p * (3 - 2 * p);            // smoothstep, like a real hand
+    const nx = x0 + (x - x0) * e, ny = y0 + (y - y0) * e;
+    await page.mouse.move(nx, ny);
+    curX = nx; curY = ny;
+    track(nx, ny);
+    if (perStep) await page.waitForTimeout(perStep);
+  }
+  curX = x; curY = y;
+  track(x, y);
+}
+
+/** Dwell in place, still sampling, so the path has points during pauses. */
+async function dwell(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    await page.waitForTimeout(Math.min(60, Math.max(10, end - Date.now())));
+    track(curX, curY);
+  }
+}
+
+/** Catch the case where something with a higher z-index covers the target. */
+async function occluded(s, x, y) {
+  try {
+    return await loc(s).evaluate((el, pt) => {
+      const hit = document.elementFromPoint(pt.x, pt.y);
+      return !(hit && (hit === el || el.contains(hit) || hit.contains(el)));
+    }, { x: x, y: y });
+  } catch (e) { return false; }
+}
 
 /** Grab point pushed toward the outside of the page: content layers with a
  *  higher z-index often cover an element's centre out in the gutters. */
@@ -92,7 +140,7 @@ function grabPoint(b, outward) {
 for (const s of flow.steps) {
   const label = s.label || (s.do + ' ' + (s.sel || '')).trim();
   try {
-    if (s.do === 'wait') { await page.waitForTimeout(s.ms ?? 800); continue; }
+    if (s.do === 'wait') { await dwell(s.ms ?? 800); continue; }
     if (s.do === 'key') { await page.keyboard.press(s.key); await page.waitForTimeout(s.ms ?? 400); continue; }
     if (s.do === 'scrollTo') {
       await loc(s).scrollIntoViewIfNeeded();
@@ -105,33 +153,37 @@ for (const s of flow.steps) {
 
     if (s.do === 'hover' || s.do === 'move') {
       const c = grabPoint(b, s.outward);
-      await page.mouse.move(c.x, c.y, { steps: s.steps ?? 30 });
-      await page.waitForTimeout(s.settleMs ?? 650);
+      await glide(c.x, c.y, { steps: s.steps ?? 26 });
+      await dwell(s.settleMs ?? 650);
+      if (await occluded(s, c.x, c.y)) console.log('NOTE: ' + s.sel + ' is covered at that point');
       if (s.beat !== false) mark(c.x, c.y, label);
-      await page.waitForTimeout(s.ms ?? 800);
+      await dwell(s.ms ?? 800);
       continue;
     }
 
     if (s.do === 'click' || s.do === 'type') {
       const c = centre(b);
-      await page.mouse.move(c.x, c.y, { steps: s.steps ?? 30 });
-      await page.waitForTimeout(s.settleMs ?? 380);
+      await glide(c.x, c.y, { steps: s.steps ?? 26 });
+      await dwell(s.settleMs ?? 380);
+      if (await occluded(s, c.x, c.y)) console.log('NOTE: ' + s.sel + ' is covered at that point');
       if (s.beat !== false) mark(c.x, c.y, label);
+      act('click', c.x, c.y, label);
       await loc(s).click().catch(function () {});
       if (s.do === 'type') {
         await page.keyboard.type(s.text, { delay: s.delay ?? 60 });
       }
-      await page.waitForTimeout(s.ms ?? 1400);
+      await dwell(s.ms ?? 1400);
       continue;
     }
 
     if (s.do === 'pulse') {           // press+release in place, no navigation
       const c = centre(b);
-      await page.mouse.move(c.x, c.y, { steps: s.steps ?? 30 });
-      await page.waitForTimeout(s.settleMs ?? 600);
+      await glide(c.x, c.y, { steps: s.steps ?? 26 });
+      await dwell(s.settleMs ?? 600);
       if (s.beat !== false) mark(c.x, c.y, label);
+      act('click', c.x, c.y, label);
       await page.mouse.down(); await page.mouse.up();
-      await page.waitForTimeout(s.ms ?? 1400);
+      await dwell(s.ms ?? 1400);
       continue;
     }
 
@@ -141,22 +193,28 @@ for (const s of flow.steps) {
       const bxAbs = Math.abs((s.by ?? [-180, 90])[0]);
       const dx = g.dir ? -g.dir * bxAbs : (s.by ?? [-180, 90])[0];
       const before = await loc(s).evaluate((e) => e.style.transform || '');
-      await page.mouse.move(g.x, g.y, { steps: s.steps ?? 30 });
-      await page.waitForTimeout(s.settleMs ?? 600);
+      await glide(g.x, g.y, { steps: s.steps ?? 26 });
+      await dwell(s.settleMs ?? 600);
+      if (await occluded(s, g.x, g.y)) console.log('NOTE: ' + s.sel + ' is covered at the grab point');
       if (s.beat !== false) mark(g.x, g.y, label + ' (grab)');
+      act('down', g.x, g.y, label);
       await page.mouse.down();
       const N = s.frames ?? 26;
       for (let i = 1; i <= N; i++) {
-        await page.mouse.move(g.x + (dx * i) / N, g.y + (by * i) / N);
-        await page.waitForTimeout(13);
+        const p = i / N, e2 = p * p * (3 - 2 * p);
+        const nx = g.x + dx * e2, ny = g.y + by * e2;
+        await page.mouse.move(nx, ny);
+        curX = nx; curY = ny; track(nx, ny);
+        await page.waitForTimeout(14);
       }
       await page.mouse.up();
-      await page.waitForTimeout(500);
+      act('up', curX, curY, label);
+      await dwell(500);
       const after = await loc(s).evaluate((e) => e.style.transform || '');
       if (after === before) console.log('WARNING: drag on ' + s.sel + ' did not move it');
       else console.log('drag ok: ' + (before || 'none') + ' -> ' + after);
       if (s.beat !== false) mark(g.x + dx, g.y + by, label);
-      await page.waitForTimeout(s.ms ?? 1200);
+      await dwell(s.ms ?? 1200);
       continue;
     }
 
@@ -166,7 +224,7 @@ for (const s of flow.steps) {
   }
 }
 
-await page.waitForTimeout(flow.tailMs ?? 1100);
+await dwell(flow.tailMs ?? 1100);
 await cdp.send('Page.stopScreencast');
 await page.waitForTimeout(400);
 
@@ -182,9 +240,11 @@ fs.writeFileSync(OUT + '/manifest.json', JSON.stringify({
   width: realW, height: realH, layout: [LW, LH], zoom: ZOOM, dsf: 1,
   frames: frames.map((f) => ({ i: f.i, ms: Math.round((f.t - base) * 1000) })),
   clicks: beats,
+  path: path,
+  actions: actions,
 }, null, 1));
 
 if (writeErr) console.log('WARNING: some frames failed to write:', String(writeErr.message).slice(0, 100));
-console.log('frames=' + frames.length + ' beats=' + beats.length + ' size=' + realW + 'x' + realH + ' -> ' + OUT);
+console.log('frames=' + frames.length + ' beats=' + beats.length + ' path=' + path.length + ' actions=' + actions.length + ' size=' + realW + 'x' + realH + ' -> ' + OUT);
 await page.close();
 }
