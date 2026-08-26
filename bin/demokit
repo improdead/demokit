@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# demokit — flow JSON in, demo MP4 out.
+#
+#   bin/demokit flows/example.json out.mp4 [--level 1.35 --inset 0.84 ...]
+#   bin/demokit --render-only .cache/shot out.mp4     # re-render without recapturing
+#
+# Must run from the demokit directory: playwriter's sandbox scopes file writes
+# to the session's cwd, so a session created elsewhere cannot write frames here.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$HOME/.local/bin:$PATH"
+
+die() { echo "demokit: $*" >&2; exit 1; }
+
+command -v node >/dev/null || die "node not found"
+command -v playwriter >/dev/null || die "playwriter not found (npm i -g playwriter)"
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  die "ffmpeg/ffprobe not on PATH. Run: (cd .tools && npm i)"
+fi
+[ -d .tools/node_modules ] || die "dependencies missing. Run: (cd .tools && npm i)"
+
+if [ "${1:-}" = "--render-only" ]; then
+  shift; SHOT="${1:?usage: --render-only <shotDir> <out.mp4>}"; shift
+  OUT="${1:?usage: --render-only <shotDir> <out.mp4>}"; shift
+  exec node src/demo.mjs "$SHOT" "$OUT" "$@"
+fi
+
+FLOW="${1:-}"; OUT="${2:-}"; shift 2 || true
+[ -n "$FLOW" ] && [ -n "$OUT" ] || die "usage: demokit <flow.json> <out.mp4> [render flags]"
+[ -f "$FLOW" ] || die "no such flow: $FLOW"
+node -e "JSON.parse(require('fs').readFileSync('$FLOW'))" 2>/dev/null || die "$FLOW is not valid JSON"
+
+mkdir -p .cache
+# Reuse a session if it is still alive, otherwise make one rooted HERE.
+SESSION="$(cat .cache/session 2>/dev/null || true)"
+if [ -z "$SESSION" ] || ! playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION"; then
+  SESSION="$(playwriter session new --browser headless 2>&1 | grep -oE 'Session [0-9]+' | grep -oE '[0-9]+')"
+  [ -n "$SESSION" ] || die "could not create a playwriter session"
+  echo "$SESSION" > .cache/session
+  echo "demokit: new headless session $SESSION"
+else
+  echo "demokit: reusing session $SESSION"
+fi
+
+echo "demokit: capturing $FLOW"
+DEMOKIT_FLOW="$FLOW" playwriter -s "$SESSION" --timeout 300000 -f src/record.js
+
+[ -f .cache/shot/manifest.json ] || die "capture produced nothing (preflight may have failed above)"
+
+echo "demokit: rendering"
+node src/demo.mjs .cache/shot "$OUT" "$@"

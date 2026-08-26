@@ -6,16 +6,29 @@ rounded corners and a drop shadow, one synthetic cursor, click ripples, click-fo
 dead air compressed. No captions.
 
 ```bash
-cd .tools && npm i && cd ..                 # vendored ffmpeg/ffprobe (no Homebrew needed)
-
-# IMPORTANT: create the session FROM this directory. playwriter's sandbox scopes
-# file writes to the session's cwd, so a session made elsewhere cannot write
-# frames here and relative flow paths won't resolve.
-playwriter session new --browser headless   # or use your real Chrome session
-
-DEMOKIT_FLOW=flows/example.json playwriter -s <id> -f src/record.js
-node src/demo.mjs .cache/shot out.mp4
+cd .tools && npm i && cd ..          # vendored ffmpeg/ffprobe (no Homebrew needed)
+./bin/demokit flows/example.json out/demo.mp4
 ```
+
+That is the whole thing: it creates or reuses a headless playwriter session, captures, and renders.
+Re-render without re-capturing (frames are already on disk):
+
+```bash
+./bin/demokit --render-only .cache/shot out/demo.mp4 --level 1.6
+```
+
+## What this is
+
+A **CLI** plus a **skill**. Not an MCP server — playwriter is already the MCP layer for browser
+control, and rendering is a batch job with no reason to be a tool call.
+
+- `bin/demokit` — the command.
+- `skill/SKILL.md` — the workflow an agent follows: storyboard, write the flow, capture, render,
+  *review the frames*, tune. Symlinked into `.claude/skills/demo-video`, so Claude Code picks it up
+  and will load it when you ask for a demo video.
+
+Run the session from this directory: playwriter's sandbox scopes file writes to the session's cwd,
+so a session created elsewhere cannot write frames here. `bin/demokit` handles that for you.
 
 Three passes: `cursor.py` draws the pointer and click pulses onto the frames, `render.mjs`
 composites the framed shot and the zoom, `pace.mjs` compresses the dead air.
