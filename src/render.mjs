@@ -179,10 +179,15 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const framesDir = existsSync(join(shotDir, 'frames-cur'))
     ? join(shotDir, 'frames-cur') : join(shotDir, 'frames');
 
-  // concat with real per-frame durations so wall-clock timing survives
+  // concat with real per-frame durations so wall-clock timing survives.
+  // The last frame is special: the screencast stops emitting once the page
+  // stops repainting, so a held payoff has no frames behind it. `endMs` says
+  // when capture actually ended - without it the hold is cut off entirely.
+  const lastMs = man.frames[man.frames.length - 1].ms;
+  const tailS = Math.max(1 / fps, ((man.endMs ?? lastMs) - lastMs) / 1000);
   const list = man.frames.map((f, i) => {
     const next = man.frames[i + 1];
-    const d = next ? Math.max(0.008, (next.ms - f.ms) / 1000) : 1 / fps;
+    const d = next ? Math.max(0.008, (next.ms - f.ms) / 1000) : tailS;
     return `file '${join(framesDir, `f${String(f.i).padStart(5, '0')}.png`)}'\nduration ${d.toFixed(4)}`;
   });
   const last = man.frames[man.frames.length - 1];

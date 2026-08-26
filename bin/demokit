@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # demokit — flow JSON in, demo MP4 out.
 #
+#   bin/demokit probe <url>                              # look before you plan
 #   bin/demokit flows/example.json out.mp4 [--level 1.35 --inset 0.84 ...]
-#   bin/demokit --render-only .cache/shot out.mp4     # re-render without recapturing
+#   bin/demokit --render-only .cache/shot-example out.mp4   # re-render, no recapture
 #
 # Must run from the demokit directory: playwriter's sandbox scopes file writes
 # to the session's cwd, so a session created elsewhere cannot write frames here.
@@ -19,6 +20,41 @@ if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
 fi
 [ -d .tools/node_modules ] || die "dependencies missing. Run: (cd .tools && npm i)"
 
+# record.js/probe.js use top-level await and run inside playwriter's sandbox, so
+# `node --check` (CommonJS) rejects them. Validate them as async bodies instead.
+node -e '
+const fs=require("fs"), AsyncFn=Object.getPrototypeOf(async function(){}).constructor;
+for (const f of ["src/record.js","src/probe.js"]) {
+  try { new AsyncFn("context","state","getCDPSession", fs.readFileSync(f,"utf8")); }
+  catch (e) { console.error("demokit: syntax error in "+f+": "+e.message); process.exit(1); }
+}' || exit 1
+
+# playwriter's sandbox does not inherit the environment, so parameters go in a file.
+write_args() { mkdir -p .cache; node -e '
+  const fs=require("fs");
+  fs.writeFileSync(".cache/args.json", JSON.stringify(Object.fromEntries(
+    process.argv.slice(1).map(a=>a.split("=")).filter(p=>p.length===2))));
+' -- "$@"; }
+
+ensure_session() {
+  SESSION="$(cat .cache/session 2>/dev/null || true)"
+  if [ -z "$SESSION" ] || ! playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION"; then
+    SESSION="$(playwriter session new --browser headless 2>&1 | grep -oE 'Session [0-9]+' | grep -oE '[0-9]+')"
+    [ -n "$SESSION" ] || die "could not create a playwriter session"
+    mkdir -p .cache; echo "$SESSION" > .cache/session
+    echo "demokit: new headless session $SESSION"
+  else
+    echo "demokit: reusing session $SESSION"
+  fi
+}
+
+if [ "${1:-}" = "probe" ]; then
+  shift; URL="${1:?usage: demokit probe <url>}"
+  ensure_session
+  write_args "url=$URL"
+  exec playwriter -s "$SESSION" --timeout 180000 -f src/probe.js
+fi
+
 if [ "${1:-}" = "--render-only" ]; then
   shift; SHOT="${1:?usage: --render-only <shotDir> <out.mp4>}"; shift
   OUT="${1:?usage: --render-only <shotDir> <out.mp4>}"; shift
@@ -30,22 +66,18 @@ FLOW="${1:-}"; OUT="${2:-}"; shift 2 || true
 [ -f "$FLOW" ] || die "no such flow: $FLOW"
 node -e "JSON.parse(require('fs').readFileSync('$FLOW'))" 2>/dev/null || die "$FLOW is not valid JSON"
 
-mkdir -p .cache
-# Reuse a session if it is still alive, otherwise make one rooted HERE.
-SESSION="$(cat .cache/session 2>/dev/null || true)"
-if [ -z "$SESSION" ] || ! playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION"; then
-  SESSION="$(playwriter session new --browser headless 2>&1 | grep -oE 'Session [0-9]+' | grep -oE '[0-9]+')"
-  [ -n "$SESSION" ] || die "could not create a playwriter session"
-  echo "$SESSION" > .cache/session
-  echo "demokit: new headless session $SESSION"
-else
-  echo "demokit: reusing session $SESSION"
-fi
+ensure_session
+# One shot dir per flow: a shared .cache/shot means capturing a second flow
+# destroys the first one's frames, and --render-only silently re-renders the
+# wrong take.
+SHOT=".cache/shot-$(basename "$FLOW" .json)"
+write_args "flow=$FLOW" "out=$SHOT"
 
 echo "demokit: capturing $FLOW"
-DEMOKIT_FLOW="$FLOW" playwriter -s "$SESSION" --timeout 300000 -f src/record.js
+playwriter -s "$SESSION" --timeout 300000 -f src/record.js
 
-[ -f .cache/shot/manifest.json ] || die "capture produced nothing (preflight may have failed above)"
+[ -f "$SHOT/manifest.json" ] || die "capture produced nothing (preflight may have failed above)"
 
 echo "demokit: rendering"
-node src/demo.mjs .cache/shot "$OUT" "$@"
+node src/demo.mjs "$SHOT" "$OUT" "$@"
+echo "demokit: re-render without recapturing -> bin/demokit --render-only $SHOT $OUT --level 1.5"

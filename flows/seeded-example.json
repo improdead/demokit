@@ -1,0 +1,22 @@
+{
+  "claim": "A security engineer who today triages Dependabot noise by hand will believe Trident finds the exploitable ones and writes the patch itself, in two clicks.",
+  "url": "http://127.0.0.1:8893/",
+  "layout": [1280, 720],
+  "zoom": 2,
+  "seed": {
+    "clock": "2026-08-26T15:41:00Z",
+    "routes": [
+      { "url": "**/api/findings*", "file": "fixtures/findings.json", "delayMs": 380 }
+    ]
+  },
+  "hide": ["#intercom"],
+  "steps": [
+    { "do": "wait", "ms": 1100 },
+    { "do": "hover", "sel": ".kpi:nth-child(2)", "label": "3 critical, untriaged", "ms": 900 },
+    { "do": "click", "sel": "tr[data-row=\"0\"]", "label": "open the SQL injection", "ms": 1500,
+      "expect": { "sel": "#drawer.open pre" } },
+    { "do": "click", "sel": "#gen", "later": true, "label": "generate the fix", "ms": 2600,
+      "expect": { "sel": "#diff", "timeout": 9000 } },
+    { "do": "hover", "sel": "#diff", "later": true, "label": "the patch", "ms": 2600 }
+  ]
+}

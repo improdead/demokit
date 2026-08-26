@@ -7,6 +7,7 @@ dead air compressed. No captions.
 
 ```bash
 cd .tools && npm i && cd ..          # vendored ffmpeg/ffprobe (no Homebrew needed)
+./bin/demokit probe https://app.example.com     # look before you plan
 ./bin/demokit flows/example.json out/demo.mp4
 ```
 
@@ -14,7 +15,7 @@ That is the whole thing: it creates or reuses a headless playwriter session, cap
 Re-render without re-capturing (frames are already on disk):
 
 ```bash
-./bin/demokit --render-only .cache/shot out/demo.mp4 --level 1.6
+./bin/demokit --render-only .cache/shot-example out/demo.mp4 --level 1.6
 ```
 
 ## What this is
@@ -23,9 +24,9 @@ A **CLI** plus a **skill**. Not an MCP server — playwriter is already the MCP 
 control, and rendering is a batch job with no reason to be a tool call.
 
 - `bin/demokit` — the command.
-- `skill/SKILL.md` — the workflow an agent follows: storyboard, write the flow, capture, render,
-  *review the frames*, tune. Symlinked into `.claude/skills/demo-video`, so Claude Code picks it up
-  and will load it when you ask for a demo video.
+- `skill/SKILL.md` — how an agent *plans* a demo: probe the app, write the claim, write the state
+  ledger, seed the preconditions, film, verify against objective checks. Symlinked into
+  `.claude/skills/demo-video`, so Claude Code loads it when you ask for a demo video.
 
 Run the session from this directory: playwriter's sandbox scopes file writes to the session's cwd,
 so a session created elsewhere cannot write frames here. `bin/demokit` handles that for you.
@@ -33,10 +34,31 @@ so a session created elsewhere cannot write frames here. `bin/demokit` handles t
 Three passes: `cursor.py` draws the pointer and click pulses onto the frames, `render.mjs`
 composites the framed shot and the zoom, `pace.mjs` compresses the dead air.
 
+## Planning: probe before you write a flow
+
+```
+$ ./bin/demokit probe http://127.0.0.1:8893/
+--- probe: Trident · Findings ---
+headings   : Findings
+top actions: (none)
+inputs     : 0 | tables: 0 | repeaters: -
+api calls  : GET http://127.0.0.1:8893/api/findings
+verdict    : empty=true authWalled=false dataSignals=0 stubbable=true
+empty hints: No findings yet
+```
+
+Read-only — it clicks nothing, so it is safe against production. `.cache/probe.json` also carries
+stability-ranked selectors (id → data-testid → aria-label → text → class) for every button, link
+and input, which is what you write the flow from.
+
+The verdict is the decision: `empty=true stubbable=true` means the environment has nothing to film
+and the API surface is the place to seed it.
+
 ## Describing a flow
 
 ```json
 {
+  "claim": "A security engineer will believe Trident writes the patch itself, in two clicks.",
   "url": "https://app.example.com/scans",
   "layout": [1280, 720],
   "zoom": 2,
@@ -66,7 +88,48 @@ Every step with a selector becomes a **beat** — a zoom anchor — unless you s
 `nth` picks among matches. `label` shows up in logs.
 
 **Selectors are preflighted before recording.** If one matches nothing you get a list and no
-capture, rather than a silently empty video ten minutes later.
+capture, rather than a silently empty video ten minutes later. A step whose target legitimately
+does not exist yet — a drawer, a generated diff — takes `"later": true`, which excuses that one
+step and keeps validating the rest. The flow-wide `"allowMissing"` escape hatch exists but silences
+the genuinely broken steps too.
+
+`"expect": {"sel": "…"}` asserts the step actually did something. A click that lands and silently
+does nothing otherwise records a confident zoom onto nothing, which is the failure mode this whole
+tool exists to avoid.
+
+## Seeding: filming an empty environment honestly
+
+Everything under `seed` is installed as an init script **before the first navigation** — setting it
+afterwards is the classic mistake, because the app has already read storage and rendered its empty
+state.
+
+```json
+"seed": {
+  "clock": "2026-08-26T15:41:00Z",
+  "localStorage": { "onboarded": "true" },
+  "routes": [
+    { "url": "**/api/findings*", "file": "fixtures/findings.json", "delayMs": 380 }
+  ]
+}
+```
+
+**The glob is matched against the full URL including the query string.** `**/api/findings` does not
+match `/api/findings?status=open` — verified the hard way; the stub silently never fires and the
+app renders its empty state. Always suffix `*`.
+
+`file` keeps fabricated data in one committed, reviewable place instead of inline in the flow. The
+worked example generates it from a single script so that derived numbers are computed rather than
+typed, and take 2 is identical to take 1:
+
+```
+fixtures/gen-findings.mjs  ->  fixtures/findings.json  <-  flows/seeded-example.json
+```
+
+The rule the skill enforces: **seed the inputs, never the payoff.** Filling an empty queue with
+twelve realistic findings so the product can generate a patch is a demo; stubbing the
+generate-patch response is a lie. `hide` (visibility) removes chat widgets and cookie banners;
+`redact` (9px blur) exists but substituting a fabricated value beats blurring a real one — a blur
+box announces that real customer data is on screen, and the zoom pushes right into it.
 
 ## Render options
 
@@ -101,6 +164,24 @@ frame, and small type reads as soft however many pixels it has. Hence `layout` �
 `zoompan` upscale 1.35× throws away the 2560 capture at exactly the moment the viewer is looking
 closest. Instead the whole composite is built at 2560×1440, `zoompan` crops from that, and a single
 lanczos downscale to 1080p happens last. Measured +46% edge energy on a text region.
+
+## The screencast only fires on repaints
+
+`Page.startScreencast` emits a frame when the page **composites a new frame**, not on a clock. That
+is efficient and quietly wrong for a demo, because the synthetic cursor is invisible to the page:
+
+- A pointer gliding across a static screen produces **no frames**, so the drawn cursor freezes and
+  then teleports when something finally repaints.
+- A held payoff — the diff on screen, nothing animating — produces no frames either, so the frame
+  timeline just *ends*. Measured on a 13.8s take: the last frame landed at 7.5s and the final beat
+  at 10.1s was outside the video entirely. The hold you carefully wrote is silently cut.
+
+Two fixes, both needed. `record.js` nudges the alpha of a 1px fixed element after every pointer
+sample (and at ~7fps while dwelling) — a real paint invalidation that costs nothing visually; the
+same take went 155 → 260 frames and 7.5s → 13.7s of coverage. And the manifest carries `endMs`, the
+true end of capture, so `render.mjs` holds the last frame instead of giving it `1/fps`.
+
+Budget roughly **6MB/s of capture** in full-resolution PNGs at 2560×1440.
 
 ## ffmpeg traps
 
@@ -137,6 +218,10 @@ envelopes rather than a sum, so overlapping zooms don't compound.
 **Pacing runs last.** Zoom envelopes live in video time, so compressing first desynchronises every
 keyframe. Idle regions carry no envelope, which is why speeding them up afterwards is safe.
 
+**The tail after the final beat is not idle.** It is the payoff hold — resting on the outcome is the
+whole point of the ending — so `planSegments` keeps `tailHold` (3.5s) of it at normal speed and only
+compresses what is beyond. Speeding it up is how a demo ends on a jump cut.
+
 ## The cursor
 
 Two cursors, deliberately, and this is the part worth copying:
@@ -146,7 +231,11 @@ Two cursors, deliberately, and this is the part worth copying:
 - **Drawn pointer** — rendered at export from the logged path. Nothing about the real pointer is
   ever captured; a headless screencast has no cursor at all.
 
-The subtlety is what gets logged. Recording only the *beats* and reconstructing an eased line
+The subtlety is what gets logged. Beats and pointer path are also shifted onto the frame clock
+before they are written — they are timed from capture start, the frames from the first frame to
+arrive, and the difference is enough to put a ripple on the wrong frame.
+
+Recording only the *beats* and reconstructing an eased line
 between them looks fine until something is dragged: the page follows the real pointer while the
 drawn one takes a different route, and the cursor visibly detaches from the thing it is supposedly
 moving. `page.mouse.move({steps})` interpolates internally and reports nothing, so `record.js`
@@ -177,6 +266,8 @@ the recorder's own beat log means there is exactly one cursor and it is always o
 
 ```
 flows/           flow definitions (JSON)
+fixtures/        fabricated data, generated by a script and committed so it can be reviewed
+src/probe.js     read-only page recon: what is this, is it empty, what could be stubbed
 src/record.js    capture: CDP PNG screencast + dense pointer path (runs inside playwriter)
 src/cursor.py    draws cursor + click pulses onto the frames (per-frame, exact)
 src/render.mjs   frame, backdrop, shadow, zoom — one ffmpeg graph
@@ -184,13 +275,17 @@ src/pace.mjs     idle speed-up (after zoom)
 src/demo.mjs     shot dir -> MP4
 vendor/          shallow clones kept for reference: playwriter, playwright-recast, openscreen
 .tools/          vendored ffmpeg + ffprobe
-.cache/          frames and renders (gitignored)
+.cache/shot-<flow>/  frames + manifest, one dir per flow (gitignored)
 ```
 
 ## Not done
 
 - **No browser chrome.** A tab screencast has no traffic lights or URL bar; the reference demos
   lean on it. It would have to be drawn synthetically.
-- No redaction — nothing blurs API keys or customer data yet.
+- **No captions, audio, or text cards**, by design — every load-bearing fact has to be legible in
+  the UI itself.
+- **Streaming responses can't be stubbed.** `route.fulfill` buffers, so an SSE/NDJSON progressive UI
+  collapses into one pop. Point the app at a local server instead.
+- **Timezone can't be pinned**, only the instant.
 - `chrome.tabCapture` (true 30fps, native res) needs the extension clicked on the tab, so headless
   runs can't use it.

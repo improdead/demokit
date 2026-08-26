@@ -1,0 +1,128 @@
+{
+ "findings": [
+  {
+   "id": "fnd_8crl_sqli",
+   "title": "Unparameterised SQL built from org_id",
+   "severity": "critical",
+   "repo": "billing-api",
+   "path": "services/billing/queries.py",
+   "line": 41,
+   "detectedAt": "2026-08-26T15:27:00.000Z",
+   "evidence": "POST /v1/orgs/8841/invoices\nsrc=192.0.2.47  ua=curl/8.4.0\norg_id=\"8841' OR 1=1 --\""
+  },
+  {
+   "id": "fnd_8evg_ssrf",
+   "title": "Webhook target fetched without an internal-range guard",
+   "severity": "critical",
+   "repo": "webhooks",
+   "path": "services/webhooks/dispatch.go",
+   "line": 88,
+   "detectedAt": "2026-08-26T15:24:00.000Z",
+   "evidence": "POST /v1/webhooks/test\ntarget=http://169.254.169.254/latest/meta-data/\nsrc=192.0.2.113"
+  },
+  {
+   "id": "fnd_8gzb_authz",
+   "title": "Invoice endpoint missing org scope check",
+   "severity": "critical",
+   "repo": "billing-api",
+   "path": "services/billing/routes.py",
+   "line": 206,
+   "detectedAt": "2026-08-26T15:18:00.000Z",
+   "evidence": "services/billing/routes.py:206\nInvoice endpoint missing org scope check"
+  },
+  {
+   "id": "fnd_8j36_xss",
+   "title": "dangerouslySetInnerHTML on unsanitised comment markdown",
+   "severity": "high",
+   "repo": "console-web",
+   "path": "app/components/CommentBody.tsx",
+   "line": 62,
+   "detectedAt": "2026-08-26T14:43:00.000Z",
+   "evidence": "app/components/CommentBody.tsx:62\ndangerouslySetInnerHTML on unsanitised comment markdown"
+  },
+  {
+   "id": "fnd_8l71_secret",
+   "title": "Database password committed as a default variable value",
+   "severity": "high",
+   "repo": "infra-terraform",
+   "path": "modules/rds/main.tf",
+   "line": 19,
+   "detectedAt": "2026-08-26T14:40:00.000Z",
+   "evidence": "variable \"db_password\" {\n  default = \"REDACTED-BY-TRIDENT\"\n}"
+  },
+  {
+   "id": "fnd_8naw_deps",
+   "title": "axios 0.27.2 — CVE-2023-45857, proxy credentials leak",
+   "severity": "high",
+   "repo": "console-web",
+   "path": "package-lock.json",
+   "line": 1204,
+   "detectedAt": "2026-08-26T12:37:00.000Z",
+   "evidence": "package-lock.json:1204\naxios 0.27.2 — CVE-2023-45857, proxy credentials leak"
+  },
+  {
+   "id": "fnd_8per_cors",
+   "title": "Access-Control-Allow-Origin reflects the request Origin header",
+   "severity": "high",
+   "repo": "edge-gateway",
+   "path": "gateway/cors.ts",
+   "line": 27,
+   "detectedAt": "2026-08-26T12:30:00.000Z",
+   "evidence": "gateway/cors.ts:27\nAccess-Control-Allow-Origin reflects the request Origin header"
+  },
+  {
+   "id": "fnd_8rim_proto",
+   "title": "Recursive merge reachable from a user-controlled payload, allowing prototype pollution on the settings object",
+   "severity": "medium",
+   "repo": "console-web",
+   "path": "app/lib/merge.ts",
+   "line": 11,
+   "detectedAt": "2026-08-26T08:59:00.000Z",
+   "evidence": "app/lib/merge.ts:11\nRecursive merge reachable from a user-controlled payload, allowing prototype pollution on the settings object"
+  },
+  {
+   "id": "fnd_8tmh_jwt",
+   "title": "JWT verified without pinning the expected algorithm",
+   "severity": "medium",
+   "repo": "edge-gateway",
+   "path": "gateway/auth/verify.ts",
+   "line": 44,
+   "detectedAt": "2026-08-26T08:43:00.000Z",
+   "evidence": "gateway/auth/verify.ts:44\nJWT verified without pinning the expected algorithm"
+  },
+  {
+   "id": "fnd_8vqc_logs",
+   "title": "Full card BIN written to the audit log",
+   "severity": "medium",
+   "repo": "billing-api",
+   "path": "services/billing/audit.py",
+   "line": 77,
+   "detectedAt": "2026-08-26T08:06:00.000Z",
+   "evidence": "services/billing/audit.py:77\nFull card BIN written to the audit log"
+  },
+  {
+   "id": "fnd_8xu7_rate",
+   "title": "Password reset endpoint is not rate limited",
+   "severity": "medium",
+   "repo": "edge-gateway",
+   "path": "gateway/limits.ts",
+   "line": 31,
+   "detectedAt": "2026-08-25T18:11:00.000Z",
+   "evidence": "gateway/limits.ts:31\nPassword reset endpoint is not rate limited"
+  },
+  {
+   "id": "fnd_8zy2_perm",
+   "title": "Bucket policy grants s3:GetObject to *",
+   "severity": "medium",
+   "repo": "infra-terraform",
+   "path": "modules/s3/main.tf",
+   "line": 52,
+   "detectedAt": "2026-08-25T15:10:00.000Z",
+   "evidence": "modules/s3/main.tf:52\nBucket policy grants s3:GetObject to *"
+  }
+ ],
+ "openCount": 12,
+ "criticalCount": 3,
+ "repoCount": 5,
+ "mttf": "4h 12m"
+}

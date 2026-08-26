@@ -20,11 +20,16 @@ const run = promisify(execFile);
  * @param duration seconds
  * @param keep     seconds of normal speed held either side of a click
  */
-export function planSegments({ clicks, duration, keep = 1.35, speed = 4, minIdle = 0.9 }) {
+export function planSegments({ clicks, duration, keep = 1.35, speed = 4, minIdle = 0.9, tailHold = 3.5 }) {
   if (!clicks.length) return [{ start: 0, end: duration, speed: 1 }];
   const windows = clicks
     .map((c) => [Math.max(0, c.atMs / 1000 - keep), Math.min(duration, c.atMs / 1000 + keep)])
     .sort((a, b) => a[0] - b[0]);
+  // The stretch after the LAST beat is the payoff hold, not dead air - resting
+  // on the outcome is the point. Speeding it 4x is how a demo ends on a jump
+  // cut. Keep it at normal speed up to tailHold, then compress the remainder.
+  const lastEnd = windows[windows.length - 1][1];
+  windows[windows.length - 1][1] = Math.min(duration, Math.max(lastEnd, lastEnd + tailHold - keep));
 
   // merge overlapping keep-windows
   const merged = [windows[0]];
