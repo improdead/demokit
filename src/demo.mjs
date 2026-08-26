@@ -19,7 +19,9 @@ const ASSETS = join(HERE, '..', '.assets');
 const [, , shotArg, outArg, ...rest] = process.argv;
 if (!shotArg || !outArg) {
   console.error('usage: demo.mjs <shotDir> <out.mp4> [--level N --inset N --bias N --gap MS --keep S --speed N --bg NAME]');
-  console.error('  --bg     auto (default) | dusk ember tide slate noir linen | #rrggbb | <image.png> | blur');
+  console.error('  --bg     auto | canvas-garden|canvas-dusk|canvas-tide|canvas-ember|canvas-slate');
+  console.error('           | dusk ember tide slate noir linen | #rrggbb | <wallpaper.jpg> | blur');
+  console.error('  --bgblur 0.004 --bgsat 0.82 --bgdim 0.92   how far a photo backdrop recedes');
   console.error('  --beats  prune (drop beats where nothing changed) | auto | augment | off');
   console.error('  --deep   1.7   deepest zoom; small targets approach it, big ones stay shallow');
   console.error('  --chrome <url> draw macOS + browser chrome around the page  [--tabs a|b|c]');
@@ -87,6 +89,9 @@ const r = await render({
   openPull: Number(arg('pull', '1.28')),
   openMs: Number(arg('pullms', '1500')),
   bg: arg('bg', 'auto'),
+  bgBlur: Number(arg('bgblur', '0.004')),
+  bgSat: Number(arg('bgsat', '0.82')),
+  bgDim2: Number(arg('bgdim', '0.92')),
 });
 console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.clicks.length} click(s), backdrop=${r.backdrop}`);
 

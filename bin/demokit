@@ -5,6 +5,7 @@
 #   bin/demokit term "pytest -q" out.mp4                 # a terminal, rendered offscreen
 #   bin/demokit screen out.mp4 --seconds 30              # a native app / the desktop
 #   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
+#   bin/demokit wallpapers all                           # 4K grounds, local + fetched
 #   bin/demokit --session <id> <flow.json> <out.mp4>     # record via real Chrome (auth)
 #   bin/demokit flows/example.json out.mp4 [--level 1.35 --inset 0.84 ...]
 #   bin/demokit --render-only .cache/shot-example out.mp4   # re-render, no recapture
@@ -112,6 +113,10 @@ fi
 # Measure a finished video against the objective checks, and optionally
 # re-render until they pass. Framing only - it will not pretend a knob can fix
 # a demo of the wrong thing.
+if [ "${1:-}" = "wallpapers" ]; then
+  shift; exec node src/wallpapers.mjs "$@"
+fi
+
 if [ "${1:-}" = "review" ]; then
   shift; SHOT="${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}"; shift
   OUT="${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}"; shift

@@ -140,9 +140,9 @@ print(sum(px) / len(px))`;
 }
 
 /** @param spec  "dusk" | "#101010" | "/path/to/wallpaper.png" | "blur" */
-export async function makeBackdrop({ dir, w, h, spec }) {
+export async function makeBackdrop({ dir, w, h, spec, treatBlur = 0.004, treatSat = 0.82, treatDim = 0.92 }) {
   mkdirSync(dir, { recursive: true });
-  const key = spec.replace(/[^a-z0-9]/gi, '_');
+  const key = (spec.replace(/[^a-z0-9]/gi, '_') + `_${treatBlur}_${treatSat}_${treatDim}`).slice(-90);
   const out = join(dir, `bg-${key}-${w}x${h}.png`);
   if (existsSync(out)) return out;
 
@@ -153,14 +153,22 @@ Image.new('RGB', (${w}, ${h}), ${JSON.stringify(spec)}).save(${JSON.stringify(ou
     return out;
   }
   if (!BACKDROPS[spec] && !CANVASES[spec]) {   // treat anything else as an image path
+    // A real photograph at full contrast fights the UI - the window stops being
+    // the subject. Soften, desaturate and dim it a little so it reads as a
+    // surface the window is sitting on rather than a second thing to look at.
     await run('python3', ['-c', `
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 im = Image.open(${JSON.stringify(spec)}).convert('RGB')
 tw, th = ${w}, ${h}
 s = max(tw / im.width, th / im.height)
 im = im.resize((max(tw, int(im.width * s)), max(th, int(im.height * s))), Image.LANCZOS)
 l = (im.width - tw) // 2; t = (im.height - th) // 2
-im.crop((l, t, l + tw, t + th)).save(${JSON.stringify(out)})`]);
+im = im.crop((l, t, l + tw, t + th))
+if ${treatBlur} > 0:
+    im = im.filter(ImageFilter.GaussianBlur(tw * ${treatBlur}))
+im = ImageEnhance.Color(im).enhance(${treatSat})
+im = ImageEnhance.Brightness(im).enhance(${treatDim})
+im.save(${JSON.stringify(out)}, quality=95)`], { maxBuffer: 1 << 26 });
     return out;
   }
 
@@ -440,7 +448,10 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const firstFrame = join(framesDir, `f${String(man.frames[0].i).padStart(5, '0')}.png`);
   if (bgSpec === 'auto') bgSpec = await pickBackdrop(firstFrame);
   const backdrop = bgSpec === 'blur' ? null
-    : await makeBackdrop({ dir: assetDir, w: even(srcW), h: even(Math.round(srcW * (outH / outW))), spec: bgSpec });
+    : await makeBackdrop({
+        dir: assetDir, w: even(srcW), h: even(Math.round(srcW * (outH / outW))), spec: bgSpec,
+        treatBlur: opts.bgBlur ?? 0.004, treatSat: opts.bgSat ?? 0.82, treatDim: opts.bgDim2 ?? 0.92,
+      });
 
   // concat with real per-frame durations so wall-clock timing survives.
   // The last frame is special: the screencast stops emitting once the page
