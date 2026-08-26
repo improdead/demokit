@@ -7,7 +7,7 @@
  */
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, copyFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { render } from './render.mjs';
@@ -29,8 +29,26 @@ if (!shotArg || !outArg) {
   console.error('  --pull   1.28  opening pull-back depth (1 = off), --pullms 1500');
   process.exit(2);
 }
-const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
+// The look is DATA, saved beside the recording. Without this, anything that
+// re-renders (the autotuner especially) silently drops --w/--bg/--chrome and
+// hands back a 1080p demo on a default background. Idea taken from DemoTape's
+// recipe.json: change a field, re-render, footage identical.
+const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'gap', 'keep', 'speed',
+  'bg', 'bgblur', 'bgsat', 'bgdim', 'chrome', 'tabs', 'chrome-theme', 'pull', 'pullms', 'pad'];
+const arg0 = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
 const shotDir = resolve(shotArg), outPath = resolve(outArg);
+const recipePath = join(shotDir, 'recipe.json');
+let recipe = {};
+try { recipe = JSON.parse(readFileSync(recipePath, 'utf8')); } catch { /* first render */ }
+for (const k of RECIPE_KEYS) { const v = arg0(k, null); if (v !== null) recipe[k] = v; }
+// Loud about typos: a misspelled key means the change did NOT happen, and
+// reporting that as success is how a "fixed" render ships unchanged.
+for (const k of rest.filter((a) => a.startsWith('--')).map((a) => a.slice(2))) {
+  if (!RECIPE_KEYS.includes(k) && !['edit', 'redirect', 'beats', 'maxbeats', 'fill'].includes(k)) {
+    console.warn(`demo: ignoring unknown option --${k}`);
+  }
+}
+const arg = (n, d) => (recipe[n] !== undefined ? recipe[n] : d);
 // ffmpeg will not create the output directory for you.
 mkdirSync(dirname(outPath), { recursive: true });
 const stage = join(ASSETS, 'stage.mp4');
@@ -120,4 +138,6 @@ const p = await pace({
 });
 if (p.skipped) copyFileSync(stage, outPath);
 else console.log(`paced ${p.duration.toFixed(1)}s -> ${(p.duration - p.saved).toFixed(1)}s`);
+writeFileSync(recipePath, JSON.stringify(recipe, null, 1));
 console.log(`wrote ${outPath}`);
+console.log(`recipe: ${recipePath} (edit a field and re-render; the footage is untouched)`);
