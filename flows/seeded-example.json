@@ -1,6 +1,7 @@
 {
   "claim": "A security engineer who today triages Dependabot noise by hand will believe Trident finds the exploitable ones and writes the patch itself, in two clicks.",
   "url": "http://127.0.0.1:8893/",
+  "_run": "python3 examples/findings-app/serve.py & — see examples/findings-app/README.md",
   "layout": [1280, 720],
   "zoom": 2,
   "seed": {
