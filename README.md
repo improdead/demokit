@@ -6,21 +6,26 @@ shadow, a synthetic cursor, click ripples, click-focused zoom, and dead air comp
 captions.
 
 ```bash
-# 1. drive + trace the flow (playwriter). Record at 1920x1080 - see "sharpness".
-playwriter -s <session> -e "$(cat flows/example.js)"
+# 1. capture: full-resolution PNG frames + an exact click log
+playwriter -s <session> -f src/record.js
 
-# 2. trace.zip -> polished MP4
-node src/demo.mjs .cache/flow.zip out.mp4
+# 2. render
+node src/demo.mjs .cache/shot out.mp4
 #   --level 1.4   zoom depth        --inset 0.8   window size in frame
 #   --bias 0.4    pull toward centre --gap 1500    merge clicks closer than this
 #   --keep 1.35   normal-speed pad   --speed 4     idle speed-up
 ```
 
-Three passes, in this order:
+Two passes:
 
-1. **recast** — cursor overlay + click ripples only.
-2. **`src/frame.mjs`** — inset frame, rounded corners, shadow, blurred backdrop, click zoom.
-3. **`src/pace.mjs`** — compress the gaps between zooms.
+1. **`src/render.mjs`** — cursor + click ripples in page space, then the inset frame, blurred
+   backdrop, shadow, and click zoom. One ffmpeg graph.
+2. **`src/pace.mjs`** — compress the gaps between zooms.
+
+**playwright-recast is no longer used.** Its cursor overlay is fed from trace coordinates in a
+different space and lands in the wrong place, which put a second, drifting cursor on screen next to
+the real one — and its zoom phase never landed at all. Drawing both ourselves from the recorder's
+own click log means there is exactly one cursor and it is always where the click was.
 
 ## Why it's built this way
 
@@ -30,9 +35,9 @@ The pieces already existed; almost none of them fit together out of the box.
 | --- | --- | --- |
 | Authenticated tab control | **playwriter** (installed) | Extension + CDP into the user's real Chrome. No physical mouse movement, no re-login. |
 | Action trace | `context.tracing` **through the playwriter relay** | Verified working — yields a real `trace.zip` with per-click `point{x,y,timestamp}`. |
-| Cursor + click ripples | **playwright-recast** (MIT) | These phases work well and are not worth rewriting. |
-| Frame, backdrop, zoom | **`src/frame.mjs` (ours)** | recast's zoom phase does not land on an externally-produced trace — see below. |
-| Pacing | **`src/pace.mjs` (ours)** | Must run after zoom, and recast's own speed-up runs before it. |
+| Capture | **CDP `Page.startScreencast`** (`src/record.js`) | Lossless PNG at true viewport size. The trace screencast is an 800x450 JPEG thumbnail — see below. |
+| Cursor, ripples, frame, zoom | **`src/render.mjs` (ours)** | One cursor, drawn from the recorder's own click coordinates. |
+| Pacing | **`src/pace.mjs` (ours)** | Must run after zoom. |
 
 ## Findings worth keeping
 
@@ -94,15 +99,21 @@ it shoves the window off-screen. `--bias` blends each target toward frame centre
 The crop centre is the **envelope-weighted blend** of all click points, and the level is `max()`
 over envelopes rather than a sum, so overlapping zooms don't compound.
 
-## Sharpness
+## Sharpness: the trace screencast is a thumbnail
 
-Record at the resolution you intend to output. Playwright's trace screencast captures at **CSS
-viewport size and ignores `deviceScaleFactor`** — verified: a 1280×720 viewport at DSF 2 still
-yields 1280×720 frames. A 1280 source upscaled into a 1920 frame is visibly soft; a 1920 source
-downscaled into the 1536 inset is sharp.
+**Playwright's trace screencast frames are 800×450 JPEGs**, regardless of viewport. Verified by
+opening the trace zip: every `resources/` entry is `JPEG (800, 450)`. The trace metadata reports
+the *page* size (1920×1080), which is what makes this so easy to miss — you think you have HD
+frames and you are actually upscaling a lossy thumbnail 2.4×.
 
-`chrome.tabCapture` via playwriter would be better still (native resolution, true 30fps) but needs
-the extension clicked on the tab, and its time base differs from the trace.
+Two dead ends on the way there: the screencast also ignores `deviceScaleFactor` (a 1280×720
+viewport at DSF 2 still yields 1280×720 metadata), and raising the CSS viewport doesn't help
+either, because the cap is on the stored image.
+
+The fix is to drive the screencast directly: `Page.startScreencast` with `format:'png'` and
+explicit `maxWidth`/`maxHeight`, acking each frame. That yields true 1920×1080 lossless PNGs.
+Per-frame timestamps go into the manifest, and the renderer feeds ffmpeg a concat list with real
+durations so wall-clock timing survives.
 
 ## Setup
 
@@ -119,9 +130,10 @@ cd .tools && npm i          # ffmpeg-static, ffprobe-static, playwright-recast
 ## Layout
 
 ```
-src/frame.mjs    compositor: inset frame, backdrop, shadow, click zoom
+src/record.js    capture: CDP PNG screencast + click log (runs inside playwriter)
+src/render.mjs   cursor, ripples, frame, backdrop, zoom - one ffmpeg graph
 src/pace.mjs     idle speed-up (runs after zoom)
-src/demo.mjs     trace.zip -> MP4 orchestrator
+src/demo.mjs     shot dir -> MP4 orchestrator
 vendor/          shallow clones: playwriter, playwright-recast, openscreen (reference)
 .tools/          vendored ffmpeg + recast
 .cache/          traces and renders (gitignored)
@@ -133,6 +145,7 @@ vendor/          shallow clones: playwriter, playwright-recast, openscreen (refe
   doesn't exist anywhere — belongs in a skill, not an MCP server, since playwriter already is the
   MCP and CLI layer.
 - Redaction. Nothing blurs API keys or customer data yet.
-- `chrome.tabCapture` as the video source — see "sharpness".
 - A synthetic browser chrome bar (traffic lights + URL pill) above the content. A tab screencast
   has no browser UI, and the reference demos lean on it heavily.
+- Cursor path is reconstructed as an eased travel into each click rather than logged per-move.
+  Looks right, but a real path log would be truer.
