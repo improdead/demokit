@@ -1,16 +1,26 @@
 # demokit
 
-Agent-driven demo videos: drive your **real logged-in Chrome tab**, record it, and get a
-customer-ready MP4 with click-focused zoom, a synthetic cursor, click ripples and idle
-speed-up. No captions.
+Agent-driven demo videos: drive a browser, record it, and get a customer-ready MP4 that looks
+**edited, not raw** — the recording inset on a blurred backdrop with rounded corners and a drop
+shadow, a synthetic cursor, click ripples, click-focused zoom, and dead air compressed. No
+captions.
 
 ```bash
-# 1. drive + trace the flow (playwriter, in your authenticated Chrome)
+# 1. drive + trace the flow (playwriter). Record at 1920x1080 - see "sharpness".
 playwriter -s <session> -e "$(cat flows/example.js)"
 
 # 2. trace.zip -> polished MP4
-node src/demo.mjs /tmp/demo-trace.zip out.mp4 --level 1.9 --viewport 1280x720
+node src/demo.mjs .cache/flow.zip out.mp4
+#   --level 1.4   zoom depth        --inset 0.8   window size in frame
+#   --bias 0.4    pull toward centre --gap 1500    merge clicks closer than this
+#   --keep 1.35   normal-speed pad   --speed 4     idle speed-up
 ```
+
+Three passes, in this order:
+
+1. **recast** — cursor overlay + click ripples only.
+2. **`src/frame.mjs`** — inset frame, rounded corners, shadow, blurred backdrop, click zoom.
+3. **`src/pace.mjs`** — compress the gaps between zooms.
 
 ## Why it's built this way
 
@@ -20,8 +30,9 @@ The pieces already existed; almost none of them fit together out of the box.
 | --- | --- | --- |
 | Authenticated tab control | **playwriter** (installed) | Extension + CDP into the user's real Chrome. No physical mouse movement, no re-login. |
 | Action trace | `context.tracing` **through the playwriter relay** | Verified working — yields a real `trace.zip` with per-click `point{x,y,timestamp}`. |
-| Cursor, click ripples, speed-up | **playwright-recast** (MIT) | These phases work well and are not worth rewriting. |
-| Click-focused zoom | **`src/zoom.mjs` (ours)** | recast's zoom phase does not land on an externally-produced trace — see below. |
+| Cursor + click ripples | **playwright-recast** (MIT) | These phases work well and are not worth rewriting. |
+| Frame, backdrop, zoom | **`src/frame.mjs` (ours)** | recast's zoom phase does not land on an externally-produced trace — see below. |
+| Pacing | **`src/pace.mjs` (ours)** | Must run after zoom, and recast's own speed-up runs before it. |
 
 ## Findings worth keeping
 
@@ -62,14 +73,36 @@ is unzoomed. Reproduced with both `autoZoom()` and `enrichZoomFromReport()`, wit
 and with a filter string that is correct when inspected. Cursor overlay and click ripples from the
 same run *do* land, so it is isolated to the zoom phase. Hence pass 2.
 
-## The zoom
+## Making it look edited
 
-`src/zoom.mjs` applies a smooth trapezoid per click — ease in, hold, ease out — where the crop
-centre is the **envelope-weighted blend** of all click points, so the active click stays framed and
-overlapping clicks don't compound (`max()` over envelopes, not sum).
+Four things separate this from a raw screen capture, and all four were needed:
 
-Unlike the 12-event cap in `postprocess.py`, the expression here is linear in click count and has
-been run without trouble at the sizes a 45-second demo produces.
+**The recording is inset, not full-bleed.** Filling the frame makes a demo read as permanently
+zoomed in. At ~80% with a blurred blow-up of itself behind, the rest state reads as a window on a
+desk, so the zoom has somewhere to go.
+
+**Smoothstep easing.** The envelope was linear at first, and a linear ramp is exactly what makes a
+zoom feel mechanical — it starts and stops abruptly at both ends. `3e² − 2e³` fixes it.
+
+**Clicks closer than `--gap` collapse into one zoom.** Clicking every ~2s with a 2.5s envelope
+gives one continuous push and no rest state at all. This was the single biggest cause of "it looks
+zoomed in the normal as well".
+
+**Centre bias.** A click on a left-hand nav rail sits at ~0.14 of frame width; zooming straight at
+it shoves the window off-screen. `--bias` blends each target toward frame centre.
+
+The crop centre is the **envelope-weighted blend** of all click points, and the level is `max()`
+over envelopes rather than a sum, so overlapping zooms don't compound.
+
+## Sharpness
+
+Record at the resolution you intend to output. Playwright's trace screencast captures at **CSS
+viewport size and ignores `deviceScaleFactor`** — verified: a 1280×720 viewport at DSF 2 still
+yields 1280×720 frames. A 1280 source upscaled into a 1920 frame is visibly soft; a 1920 source
+downscaled into the 1536 inset is sharp.
+
+`chrome.tabCapture` via playwriter would be better still (native resolution, true 30fps) but needs
+the extension clicked on the tab, and its time base differs from the trace.
 
 ## Setup
 
@@ -86,21 +119,20 @@ cd .tools && npm i          # ffmpeg-static, ffprobe-static, playwright-recast
 ## Layout
 
 ```
-src/zoom.mjs     click-focused zoom pass (standalone, importable)
+src/frame.mjs    compositor: inset frame, backdrop, shadow, click zoom
+src/pace.mjs     idle speed-up (runs after zoom)
 src/demo.mjs     trace.zip -> MP4 orchestrator
 vendor/          shallow clones: playwriter, playwright-recast, openscreen (reference)
 .tools/          vendored ffmpeg + recast
+.cache/          traces and renders (gitignored)
 ```
 
 ## Not done yet
 
-- Idle speed-up as a third pass, after zoom. Straightforward: trim/`setpts`/concat over the gaps
-  between zoom envelopes, the same shape as playwriter's `speedUpSections`.
 - Storyboard / rehearse / per-scene retry. The interesting part, and the part that genuinely
   doesn't exist anywhere — belongs in a skill, not an MCP server, since playwriter already is the
   MCP and CLI layer.
 - Redaction. Nothing blurs API keys or customer data yet.
-- Using playwriter's `chrome.tabCapture` recording (true 30fps) as the video source instead of the
-  trace's variable-rate screencast frames. recast will pick up a `.webm` sitting next to the trace,
-  but the two time bases differ and recast auto-trims blank lead frames, so this needs alignment
-  work.
+- `chrome.tabCapture` as the video source — see "sharpness".
+- A synthetic browser chrome bar (traffic lights + URL pill) above the content. A tab screencast
+  has no browser UI, and the reference demos lean on it heavily.
