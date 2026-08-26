@@ -101,6 +101,18 @@ function pathExpr(clicks, key, travel = 0.45) {
  * made without banding. Grain is added last because flat gradients band badly
  * at 8-bit after x264.
  */
+/** Painterly grounds: layered colour fields with visible brush texture.
+ *  A smooth mesh gradient reads as a CSS default. The demos worth copying sit
+ *  on something that looks like a surface - canvas, paint, paper - and the
+ *  texture is what sells the depth once the window has a shadow on it. */
+export const CANVASES = {
+  'canvas-garden': ['#5c7a3f', '#94ad5e', '#e8d9a8', '#d98fa0', '#3d5730', '#f2e6c8'],
+  'canvas-dusk':   ['#2b2350', '#5b3a7a', '#a8547e', '#e0956f', '#1d1836', '#f0c9a0'],
+  'canvas-tide':   ['#123c4e', '#1f7a86', '#6cc0ab', '#d8e6c8', '#0d2536', '#f0f3e2'],
+  'canvas-ember':  ['#3d1f18', '#8c3d22', '#d1743a', '#e8bb72', '#241210', '#f2ddb8'],
+  'canvas-slate':  ['#33383f', '#565e68', '#8b949f', '#c3c9cf', '#22262b', '#e4e7ea'],
+};
+
 export const BACKDROPS = {
   // for DARK app UIs - the ground has to be lighter or richer than the window
   dusk:   { pts: [[0.08, 0.10, '#3b2a6b'], [0.92, 0.06, '#7b3fa0'], [0.75, 0.95, '#c2557a'], [0.15, 0.85, '#2a1f52']] },
@@ -140,7 +152,7 @@ from PIL import Image
 Image.new('RGB', (${w}, ${h}), ${JSON.stringify(spec)}).save(${JSON.stringify(out)})`]);
     return out;
   }
-  if (!BACKDROPS[spec]) {              // treat anything else as an image path
+  if (!BACKDROPS[spec] && !CANVASES[spec]) {   // treat anything else as an image path
     await run('python3', ['-c', `
 from PIL import Image
 im = Image.open(${JSON.stringify(spec)}).convert('RGB')
@@ -149,6 +161,74 @@ s = max(tw / im.width, th / im.height)
 im = im.resize((max(tw, int(im.width * s)), max(th, int(im.height * s))), Image.LANCZOS)
 l = (im.width - tw) // 2; t = (im.height - th) // 2
 im.crop((l, t, l + tw, t + th)).save(${JSON.stringify(out)})`]);
+    return out;
+  }
+
+  if (CANVASES[spec]) {
+    const cols = CANVASES[spec];
+    const py = `
+from PIL import Image, ImageDraw, ImageFilter
+import random, math
+W, H = ${w}, ${h}
+cols = [tuple(int(c.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) for c in ${JSON.stringify(cols)}]
+random.seed(${w} * 7 + ${h})
+
+def stroke(d, x, y, a, L, wd, c, alpha):
+    # a brush stroke is a tapered smear, not a line: several overlapping dabs
+    n = max(3, int(L / max(2, wd * 0.6)))
+    for i in range(n):
+        t = i / (n - 1)
+        taper = math.sin(math.pi * (0.15 + 0.85 * t)) ** 0.5
+        r = wd * taper
+        px_, py_ = x + math.cos(a) * L * t, y + math.sin(a) * L * t
+        d.ellipse([px_ - r, py_ - r * 0.75, px_ + r, py_ + r * 0.75],
+                  fill=c + (int(alpha * taper),))
+
+im = Image.new('RGB', (W, H), cols[0])
+d = ImageDraw.Draw(im, 'RGBA')
+
+# 1. big colour fields, kept distinct - this is the composition, and blurring
+#    it into a single hue is what made the first attempt look like fabric
+for i in range(11):
+    c = cols[random.randrange(len(cols))]
+    r = random.uniform(W * 0.20, W * 0.50)
+    x, y = random.uniform(-W * 0.1, W * 1.1), random.uniform(-H * 0.1, H * 1.1)
+    d.ellipse([x - r, y - r * 0.8, x + r, y + r * 0.8], fill=c + (random.randint(120, 210),))
+im = im.filter(ImageFilter.GaussianBlur(W * 0.020))
+
+# 2. few, LARGE strokes with real angular variety. 2600 tiny ones at a shared
+#    angle read as fur; 260 big ones read as a hand holding a brush.
+d = ImageDraw.Draw(im, 'RGBA')
+for i in range(150):
+    c = cols[random.randrange(len(cols))]
+    x, y = random.uniform(0, W), random.uniform(0, H)
+    a = random.uniform(0, math.pi * 2)
+    L = random.uniform(W * 0.06, W * 0.24)
+    wd = random.uniform(W * 0.006, W * 0.024)
+    stroke(d, x, y, a, L, wd, c, random.randint(14, 46))
+
+# 3. a few bright accents so it is not one temperature
+for i in range(26):
+    c = cols[random.randrange(len(cols))]
+    x, y = random.uniform(0, W), random.uniform(0, H)
+    stroke(d, x, y, random.uniform(0, math.pi * 2),
+           random.uniform(W * 0.03, W * 0.10), random.uniform(W * 0.004, W * 0.012),
+           c, random.randint(28, 62))
+
+# A backdrop has to recede. Blur hard at the end: the texture should read as
+# a surface at a glance and dissolve the moment you look at the window.
+im = im.filter(ImageFilter.GaussianBlur(max(2, W * 0.014)))
+
+# 4. canvas tooth + grain, so it does not band after x264
+px = im.load()
+for y in range(H):
+    for x in range(W):
+        n_ = random.randint(-6, 6)
+        r_, g_, b_ = px[x, y]
+        px[x, y] = (max(0, min(255, r_ + n_)), max(0, min(255, g_ + n_)), max(0, min(255, b_ + n_)))
+im.save(${JSON.stringify(out)})
+print('ok')`;
+    await run('python3', ['-c', py], { maxBuffer: 1 << 26 });
     return out;
   }
 
@@ -195,7 +275,7 @@ export function buildGraph({
   // downscale ONCE, at the end.
   inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0.4, minGapMs = 1500,
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
-  minLevel = 1.22, maxLevel = 1.7,
+  minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500,
 }) {
   const parts = [];
   // Cursor and click pulses are already composited into the frames by
@@ -204,9 +284,20 @@ export function buildGraph({
   parts.push(`[0:v]fps=${fps}[withcur]`);
 
   // ---- frame composite (at capture resolution) -----------------------------
-  const compW = srcW, compH = srcH;
-  const fgW = even(Math.round(compW * inset));
-  const fgH = even(Math.round(fgW * (srcH / srcW)));
+  //
+  // The canvas is the OUTPUT aspect, not the source aspect. It used to be
+  // srcW x srcH, which is fine while the window is 16:9 - but the chrome pass
+  // makes the frames taller, and scaling 2560x1592 straight into 1920x1080
+  // stretches the whole picture horizontally.
+  const compW = even(srcW);
+  const compH = even(Math.round(srcW * (outH / outW)));
+  // Fit the window inside the canvas on whichever axis binds.
+  const fitW = compW * inset, fitH = compH * inset;
+  const ar = srcW / srcH;
+  let fgW = fitW, fgH = fitW / ar;
+  if (fgH > fitH) { fgH = fitH; fgW = fitH * ar; }
+  fgW = even(Math.round(fgW));
+  fgH = even(Math.round(fgH));
   const ox = Math.round((compW - fgW) / 2);
   const oy = Math.round((compH - fgH) / 2);
   const M = 1, S = 2, B = 3; // inputs: 0 frames, 1 mask, 2 shadow, 3 backdrop
@@ -275,13 +366,30 @@ export function buildGraph({
   const levels = kept.map(levelFor);
 
   const envMax = envs.reduce((a, e) => (a ? `max(${a},${e})` : e), '');
-  const sum = envs.map((e) => `(${e})`).join('+');
+  const sum = (openPull > 1.001 && openMs > 0
+    ? envs.concat([`(3*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),2)-2*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),3))`])
+    : envs).map((e) => `(${e})`).join('+');
   const bias = (v) => (v * (1 - centerBias) + 0.5 * centerBias).toFixed(5);
-  const wx = kept.map((c, i) => `(${envs[i]})*${bias((ox + c.x * sx) / compW)}`).join('+');
-  const wy = kept.map((c, i) => `(${envs[i]})*${bias((oy + c.y * sy) / compH)}`).join('+');
+  const openEnv = (openPull > 1.001 && openMs > 0)
+    ? `(3*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),2)-2*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),3))`
+    : null;
+  const wxs = kept.map((c, i) => `(${envs[i]})*${bias((ox + c.x * sx) / compW)}`);
+  const wys = kept.map((c, i) => `(${envs[i]})*${bias((oy + c.y * sy) / compH)}`);
+  if (openEnv) { wxs.push(`(${openEnv})*0.5`); wys.push(`(${openEnv})*0.5`); }
+  const wx = wxs.join('+');
+  const wy = wys.join('+');
+  // Opening pull-back: start pushed in on the centre and ease out to the full
+  // scene. It gives the first second somewhere to go, which is what stops a
+  // demo opening on a dead static frame - and it reveals the ground the window
+  // is sitting on, which is the whole reason for having a nice one.
+  const terms = kept.map((c, i) => `(${(levels[i] - 1).toFixed(4)})*(${envs[i]})`);
+  if (openPull > 1.001 && openMs > 0) {
+    const dur = (openMs / 1000).toFixed(3);
+    const p = `clip(1-${tv}/${dur},0,1)`;
+    terms.push(`(${(openPull - 1).toFixed(4)})*(3*pow(${p},2)-2*pow(${p},3))`);
+  }
   // max over per-beat depth * envelope, so overlapping zooms don't compound.
-  const z = `(1+${kept.map((c, i) => `(${(levels[i] - 1).toFixed(4)})*(${envs[i]})`)
-    .reduce((a, e) => (a ? `max(${a},${e})` : e), '')})`;
+  const z = `(1+${terms.reduce((a, e) => (a ? `max(${a},${e})` : e), '')})`;
 
   // zoompan can't zoom below 1.0, so it runs at the composite size and the
   // single downscale to the delivery size happens after it. At max zoom the
@@ -305,17 +413,26 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const clicks = man.clicks.map((c) => ({ ...c, x: c.x * dsf, y: c.y * dsf }));
   const outW = opts.outW ?? srcW, outH = opts.outH ?? srcH;
 
-  const fgW = even(Math.round(srcW * (opts.inset ?? 0.8)));
-  const fgH = even(Math.round(fgW * (srcH / srcW)));
+  // mirror buildGraph's fit so the mask and shadow match the window exactly
+  const _compW = even(srcW), _compH = even(Math.round(srcW * (outH / outW)));
+  const _inset = opts.inset ?? 0.8;
+  const _ar = srcW / srcH;
+  let _w = _compW * _inset, _h = _w / _ar;
+  if (_h > _compH * _inset) { _h = _compH * _inset; _w = _h * _ar; }
+  const fgW = even(Math.round(_w));
+  const fgH = even(Math.round(_h));
   const { mask, shadow, pad } = await makeAssets({
     dir: assetDir, w: fgW, h: fgH,
     radius: Math.round(18 * (srcW / 1920)), pad: Math.round(40 * (srcW / 1920)),
     shadowBlur: Math.round(22 * (srcW / 1920)), shadowDy: Math.round(14 * (srcW / 1920)),
   });
 
-  // prefer the cursor-composited frames when the cursor pass has run
-  const framesDir = existsSync(join(shotDir, 'frames-cur'))
-    ? join(shotDir, 'frames-cur') : join(shotDir, 'frames');
+  // chrome > cursor > raw: each pass writes a new dir rather than mutating the
+  // capture, so any of them can be re-run without re-recording.
+  const framesDir = existsSync(join(shotDir, 'frames-chrome'))
+    ? join(shotDir, 'frames-chrome')
+    : existsSync(join(shotDir, 'frames-cur'))
+      ? join(shotDir, 'frames-cur') : join(shotDir, 'frames');
 
   // Backdrop. "auto" reads the recording's own brightness and picks a ground
   // that separates from it, rather than one that blends into it.
@@ -323,7 +440,7 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const firstFrame = join(framesDir, `f${String(man.frames[0].i).padStart(5, '0')}.png`);
   if (bgSpec === 'auto') bgSpec = await pickBackdrop(firstFrame);
   const backdrop = bgSpec === 'blur' ? null
-    : await makeBackdrop({ dir: assetDir, w: srcW, h: srcH, spec: bgSpec });
+    : await makeBackdrop({ dir: assetDir, w: even(srcW), h: even(Math.round(srcW * (outH / outW))), spec: bgSpec });
 
   // concat with real per-frame durations so wall-clock timing survives.
   // The last frame is special: the screencast stops emitting once the page

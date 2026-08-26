@@ -22,6 +22,8 @@ if (!shotArg || !outArg) {
   console.error('  --bg     auto (default) | dusk ember tide slate noir linen | #rrggbb | <image.png> | blur');
   console.error('  --beats  prune (drop beats where nothing changed) | auto | augment | off');
   console.error('  --deep   1.7   deepest zoom; small targets approach it, big ones stay shallow');
+  console.error('  --chrome <url> draw macOS + browser chrome around the page  [--tabs a|b|c]');
+  console.error('  --pull   1.28  opening pull-back depth (1 = off), --pullms 1500');
   process.exit(2);
 }
 const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
@@ -62,6 +64,17 @@ if ((man0.path || []).length) {
   console.log('cursor pass: skipped (no pointer path - real cursor is in the frames)');
 }
 
+// Synthetic window + browser chrome. A tab screencast is the page rectangle and
+// nothing else; the chrome is what makes it read as an app someone is using.
+// Runs after the cursor pass and shifts every beat down by its own height.
+if (arg('chrome', null) !== null) {
+  const c = await runp('python3', [join(HERE, 'chrome.py'), shotDir,
+    '--url', arg('chrome', 'localhost'),
+    ...(arg('tabs', null) ? ['--tabs', arg('tabs')] : []),
+    '--theme', arg('chrome-theme', 'light')], { maxBuffer: 1 << 26 });
+  process.stdout.write(c.stdout);
+}
+
 const r = await render({
   shotDir, output: stage, assetDir: ASSETS,
   // capture is 2x device pixels; downscale to 1080p so the picture is sharp
@@ -71,6 +84,8 @@ const r = await render({
   centerBias: Number(arg('bias', '0.4')),
   minGapMs: Number(arg('gap', '1500')),
   maxLevel: Number(arg('deep', '1.7')),
+  openPull: Number(arg('pull', '1.28')),
+  openMs: Number(arg('pullms', '1500')),
   bg: arg('bg', 'auto'),
 });
 console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.clicks.length} click(s), backdrop=${r.backdrop}`);
