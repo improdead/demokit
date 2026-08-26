@@ -20,7 +20,8 @@ const [, , shotArg, outArg, ...rest] = process.argv;
 if (!shotArg || !outArg) {
   console.error('usage: demo.mjs <shotDir> <out.mp4> [--level N --inset N --bias N --gap MS --keep S --speed N --bg NAME]');
   console.error('  --bg     auto (default) | dusk ember tide slate noir linen | #rrggbb | <image.png> | blur');
-  console.error('  --beats  off | auto (replace clicks with change-detected beats) | augment');
+  console.error('  --beats  prune (drop beats where nothing changed) | auto | augment | off');
+  console.error('  --deep   1.7   deepest zoom; small targets approach it, big ones stay shallow');
   process.exit(2);
 }
 const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
@@ -38,11 +39,15 @@ const man0 = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
 // Default on whenever there is no click log at all - that covers every capture
 // source that isn't the browser recorder, present and future.
 const noClicks = !(man0.clicks || []).length;
-if (arg('beats', noClicks ? 'auto' : 'off') !== 'off') {
-  const mode = arg('beats', noClicks ? 'auto' : 'augment');
+// `--beats prune` drops click beats where the screen did not change. It is not
+// the default: on a hand-authored flow a hover is often a deliberate "look at
+// this", and that reads fine now that the zoom frames the element instead of
+// pushing a fixed amount at a coordinate. Useful on generated flows.
+const beatMode = arg('beats', noClicks ? 'auto' : 'off');
+if (beatMode !== 'off') {
+  const flag = { auto: '--merge', augment: '--augment', prune: '--prune' }[beatMode] || '--merge';
   const b = await runp('python3', [join(HERE, 'beats.py'), shotDir,
-    '--max', arg('maxbeats', '6'), '--gap', arg('gap', '1500'),
-    ...(mode === 'augment' ? ['--augment'] : ['--merge'])], { maxBuffer: 1 << 26 });
+    '--max', arg('maxbeats', '6'), '--gap', arg('gap', '1500'), flag], { maxBuffer: 1 << 26 });
   process.stdout.write(b.stdout);
 }
 
@@ -65,6 +70,7 @@ const r = await render({
   inset: Number(arg('inset', '0.8')),
   centerBias: Number(arg('bias', '0.4')),
   minGapMs: Number(arg('gap', '1500')),
+  maxLevel: Number(arg('deep', '1.7')),
   bg: arg('bg', 'auto'),
 });
 console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.clicks.length} click(s), backdrop=${r.backdrop}`);

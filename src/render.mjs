@@ -195,6 +195,7 @@ export function buildGraph({
   // downscale ONCE, at the end.
   inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0.4, minGapMs = 1500,
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
+  minLevel = 1.22, maxLevel = 1.7,
 }) {
   const parts = [];
   // Cursor and click pulses are already composited into the frames by
@@ -248,12 +249,39 @@ export function buildGraph({
     const lin = `clip(min(min((${tv}-${(at - half).toFixed(4)})/${ramp},(${(at + half).toFixed(4)}-${tv})/${ramp}),1),0,1)`;
     return `(3*pow(${lin},2)-2*pow(${lin},3))`;
   });
+
+  // Per-beat depth, from the size of the thing being framed.
+  //
+  // A single global --level pushes the same amount at every beat regardless of
+  // what is there: it aims at a coordinate rather than framing an element,
+  // which is what makes the zoom read as arbitrary.
+  //
+  // But "make the element fill N% of the frame" is also wrong, and worse: a
+  // 92px badge then demands 5x, every small target pins to the ceiling, and
+  // they all look identical again. It also upscales past the capture - at 1.7x
+  // the crop is already 1506px being stretched to 1920.
+  //
+  // So: map element size onto a NARROW band, log-spaced. Big things get a
+  // gentle push, small things a firm one, and the variety between beats is what
+  // makes the camera look like it is reading the page.
+  const W_MIN = 80, W_MAX = 2000;
+  const levelFor = (c) => {
+    const w = (c.w || 0) * sx, h = (c.h || 0) * sy;
+    const span = Math.max(w, h * (compW / compH));
+    if (!span) return level;                         // no box recorded: fall back
+    const t = Math.log(Math.max(W_MIN, Math.min(W_MAX, span)) / W_MIN) / Math.log(W_MAX / W_MIN);
+    return maxLevel - (maxLevel - minLevel) * t;
+  };
+  const levels = kept.map(levelFor);
+
   const envMax = envs.reduce((a, e) => (a ? `max(${a},${e})` : e), '');
   const sum = envs.map((e) => `(${e})`).join('+');
   const bias = (v) => (v * (1 - centerBias) + 0.5 * centerBias).toFixed(5);
   const wx = kept.map((c, i) => `(${envs[i]})*${bias((ox + c.x * sx) / compW)}`).join('+');
   const wy = kept.map((c, i) => `(${envs[i]})*${bias((oy + c.y * sy) / compH)}`).join('+');
-  const z = `(1+(${level}-1)*(${envMax}))`;
+  // max over per-beat depth * envelope, so overlapping zooms don't compound.
+  const z = `(1+${kept.map((c, i) => `(${(levels[i] - 1).toFixed(4)})*(${envs[i]})`)
+    .reduce((a, e) => (a ? `max(${a},${e})` : e), '')})`;
 
   // zoompan can't zoom below 1.0, so it runs at the composite size and the
   // single downscale to the delivery size happens after it. At max zoom the

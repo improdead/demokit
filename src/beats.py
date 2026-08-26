@@ -44,6 +44,10 @@ def main():
     min_gap = float(opt("--gap", 1800))
     merge = "--merge" in argv
     augment = "--augment" in argv
+    prune = "--prune" in argv
+    prune_back = float(opt("--prune-back", 3000))    # beatAfter puts the beat
+    prune_fwd = float(opt("--prune-fwd", 1200))      # after the change
+    prune_frac = float(opt("--prune-frac", 0.002))
 
     man = json.load(open(os.path.join(shot, "manifest.json")))
     frames = man["frames"]
@@ -119,6 +123,36 @@ def main():
         if len(kept) >= max_beats:
             break
     kept.sort(key=lambda b: b["t"])
+
+    if prune:
+        # Drop beats where nothing actually happened.
+        #
+        # A hover marks a beat, so the zoom pushes in at a moment the screen is
+        # identical before and after - which is the single biggest reason the
+        # zoom reads as arbitrary. Keep a click beat only if some pixels near it
+        # changed within a window around it. The LAST beat is always kept: it is
+        # the payoff hold, and resting on an unchanged result is the point.
+        clicks = man.get("clicks", [])
+        if clicks:
+            live, dropped = [], []
+            for n_, c in enumerate(clicks):
+                if n_ == len(clicks) - 1:
+                    live.append(c)
+                    continue
+                near = [sm for sm in samples if -prune_back <= sm[0] - c["t"] <= prune_fwd]
+                if near and max(sm[4] for sm in near) >= prune_frac:
+                    live.append(c)
+                else:
+                    dropped.append(c)
+            # Never gut a demo: pruning more than a third of the beats means the
+            # detector is wrong about this take, not that the take is wrong.
+            if dropped and len(live) >= 2 and len(dropped) <= max(1, len(clicks) // 3):
+                man["clicks"] = live
+                print(f"beats: pruned {len(dropped)} beat(s) where nothing changed:")
+                for c in dropped:
+                    print(f"  - {c['t'] / 1000:.1f}s  {c.get('label', '')}")
+            elif dropped:
+                print(f"beats: {len(dropped)} beat(s) look static but too few would remain; kept all")
 
     man["autoBeats"] = kept
     slim = [{k: b[k] for k in ("x", "y", "t", "label")} for b in kept]

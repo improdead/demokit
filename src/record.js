@@ -158,7 +158,13 @@ const beats = [];
 const path = [];      // EVERY pointer position, so the drawn cursor can follow
 const actions = [];   // presses/releases, for click pulses
 const now = () => Date.now() - t0;
-const mark = (x, y, label) => beats.push({ x: Math.round(x), y: Math.round(y), t: now(), label: label });
+const mark = (x, y, label, box) => beats.push({
+  x: Math.round(x), y: Math.round(y), t: now(), label: label,
+  // The renderer needs to know how BIG the thing is, not just where it is.
+  // A fixed zoom level pushed at a coordinate frames nothing in particular,
+  // which is what makes the zoom read as arbitrary.
+  w: box ? Math.round(box.width) : 0, h: box ? Math.round(box.height) : 0,
+});
 const track = (x, y) => path.push({ x: Math.round(x), y: Math.round(y), t: now() });
 const act = (type, x, y, label) => actions.push({ type: type, x: Math.round(x), y: Math.round(y), t: now(), label: label });
 const centre = (b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
@@ -185,21 +191,57 @@ const repaint = async () => { try { await page.evaluate(() => window.__dkPulse &
 
 /** Move the pointer ourselves so every intermediate position is logged.
  *  page.mouse.move({steps}) interpolates internally and tells us nothing, which
- *  is why the drawn cursor used to detach from whatever was being dragged. */
+ *  is why the drawn cursor used to detach from whatever was being dragged.
+ *
+ *  The motion model matters more than it sounds. A straight line, a fixed step
+ *  count and a symmetric ease is what makes a cursor read as a script rather
+ *  than a hand, and it was doing all three - a 40px nudge and a 1200px sweep
+ *  took the same 26 steps and the same time. Real pointing:
+ *
+ *    - takes longer for longer/smaller targets    (Fitts's law)
+ *    - accelerates hard and decelerates long      (minimum-jerk, not smoothstep)
+ *    - curves; the wrist does not draw straight lines
+ *    - overshoots a distant target and settles back
+ *    - never holds perfectly still
+ */
+function rand(a, b) { return a + Math.random() * (b - a); }
+
 async function glide(x, y, opts) {
   opts = opts || {};
-  const steps = opts.steps ?? 26;
-  const perStep = opts.perStep ?? 12;
   const x0 = curX, y0 = curY;
+  const dx = x - x0, dy = y - y0;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1.5) { curX = x; curY = y; track(x, y); await repaint(); return; }
+
+  // Fitts: time grows with log2(distance/target). W is unknown here, so the
+  // target width is folded into the constant - the shape is what reads right.
+  const W = opts.targetW || 90;
+  const ms = opts.ms ?? Math.min(1150, 190 + 170 * Math.log2(1 + dist / W));
+  const steps = Math.max(10, Math.min(56, Math.round(ms / 16)));
+
+  // Perpendicular arc, peaking mid-path. Sign alternates so successive moves
+  // don't all bow the same way, which is its own kind of tell.
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const bow = side * Math.min(46, dist * rand(0.035, 0.075));
+  const px = -dy / dist, py = dx / dist;
+
+  // A distant move lands past the target and corrects; a short one does not.
+  const over = dist > 320 ? rand(0.02, 0.055) : 0;
+
   for (let i = 1; i <= steps; i++) {
     const p = i / steps;
-    const e = p * p * (3 - 2 * p);            // smoothstep, like a real hand
-    const nx = x0 + (x - x0) * e, ny = y0 + (y - y0) * e;
+    // minimum-jerk: slower start and a much longer tail than smoothstep
+    const e = p * p * p * (10 - 15 * p + 6 * p * p);
+    const shoot = over ? Math.sin(Math.min(1, p * 1.18) * Math.PI) * over : 0;
+    const along = e + shoot;
+    const arc = Math.sin(p * Math.PI) * bow;
+    const nx = x0 + dx * along + px * arc + rand(-0.4, 0.4);
+    const ny = y0 + dy * along + py * arc + rand(-0.4, 0.4);
     await page.mouse.move(nx, ny);
     curX = nx; curY = ny;
     track(nx, ny);
-    await repaint();                          // force a frame at every sample
-    if (perStep) await page.waitForTimeout(perStep);
+    await repaint();
+    await page.waitForTimeout(Math.round((ms / steps) * rand(0.75, 1.25)));
   }
   curX = x; curY = y;
   track(x, y);
@@ -210,8 +252,13 @@ async function glide(x, y, opts) {
 async function dwell(ms) {
   const end = Date.now() + ms;
   let lastPulse = 0;
+  const hx = curX, hy = curY;
   while (Date.now() < end) {
     await page.waitForTimeout(Math.min(60, Math.max(10, end - Date.now())));
+    // A hand resting on a mouse is never perfectly still. Sub-pixel drift
+    // around the hold point costs nothing and removes the frozen-sprite tell.
+    curX = hx + rand(-0.7, 0.7);
+    curY = hy + rand(-0.7, 0.7);
     track(curX, curY);
     // A resting pointer needs far fewer frames than a moving one; ~7fps keeps
     // the timeline populated without writing hundreds of identical PNGs.
@@ -255,7 +302,7 @@ async function runStep(s, label) {
       await glide(c.x, c.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 650);
       if (await occluded(s, c.x, c.y)) console.log('NOTE: ' + s.sel + ' is covered at that point');
-      if (s.beat !== false) mark(c.x, c.y, label);
+      if (s.beat !== false) mark(c.x, c.y, label, b);
       await dwell(s.ms ?? 800);
       return;
     }
@@ -270,7 +317,7 @@ async function runStep(s, label) {
       // the result takes a moment to arrive, the push-in peaks on a loading
       // skeleton instead of the thing that loaded. Use it on any step whose
       // payoff is what comes back, not the click itself.
-      if (s.beat !== false && !s.beatAfter) mark(c.x, c.y, label);
+      if (s.beat !== false && !s.beatAfter) mark(c.x, c.y, label, b);
       act('click', c.x, c.y, label);
       await loc(s).click().catch(function () {});
       if (s.do === 'type') {
@@ -281,7 +328,7 @@ async function runStep(s, label) {
         // re-measure: the thing worth framing may have moved or resized
         const nb = await box(s);
         const nc = nb ? centre(nb) : c;
-        mark(s.beatSel ? nc.x : c.x, s.beatSel ? nc.y : c.y, label);
+        mark(nc.x, nc.y, label, nb || b);
       }
       return;
     }
@@ -290,7 +337,7 @@ async function runStep(s, label) {
       const c = centre(b);
       await glide(c.x, c.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 600);
-      if (s.beat !== false) mark(c.x, c.y, label);
+      if (s.beat !== false) mark(c.x, c.y, label, b);
       act('click', c.x, c.y, label);
       await page.mouse.down(); await page.mouse.up();
       await dwell(s.ms ?? 1400);
@@ -306,7 +353,7 @@ async function runStep(s, label) {
       await glide(g.x, g.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 600);
       if (await occluded(s, g.x, g.y)) console.log('NOTE: ' + s.sel + ' is covered at the grab point');
-      if (s.beat !== false) mark(g.x, g.y, label + ' (grab)');
+      if (s.beat !== false) mark(g.x, g.y, label + ' (grab)', b);
       act('down', g.x, g.y, label);
       await page.mouse.down();
       const N = s.frames ?? 26;
@@ -324,7 +371,7 @@ async function runStep(s, label) {
       const after = await loc(s).evaluate((e) => e.style.transform || '');
       if (after === before) console.log('WARNING: drag on ' + s.sel + ' did not move it');
       else console.log('drag ok: ' + (before || 'none') + ' -> ' + after);
-      if (s.beat !== false) mark(g.x + dx, g.y + by, label);
+      if (s.beat !== false) mark(g.x + dx, g.y + by, label, b);
       await dwell(s.ms ?? 1200);
       return;
     }
