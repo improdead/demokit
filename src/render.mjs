@@ -87,6 +87,106 @@ function pathExpr(clicks, key, travel = 0.45) {
   return e;
 }
 
+/**
+ * Backdrops.
+ *
+ * The old default blurred the recording behind itself. Screen Studio ships
+ * wallpaper / gradient / colour / image and treats "blur the recording" as an
+ * open feature request, not a default - and for good reason: a dark app blurred
+ * behind itself is just murk, with no tonal separation between the window and
+ * the ground it sits on.
+ *
+ * These are mesh gradients: a few colour points blended by inverse-square
+ * distance, rendered small and upscaled, which is how a smooth wallpaper is
+ * made without banding. Grain is added last because flat gradients band badly
+ * at 8-bit after x264.
+ */
+export const BACKDROPS = {
+  // for DARK app UIs - the ground has to be lighter or richer than the window
+  dusk:   { pts: [[0.08, 0.10, '#3b2a6b'], [0.92, 0.06, '#7b3fa0'], [0.75, 0.95, '#c2557a'], [0.15, 0.85, '#2a1f52']] },
+  ember:  { pts: [[0.10, 0.12, '#4a2318'], [0.90, 0.10, '#a8542a'], [0.80, 0.92, '#d98f45'], [0.12, 0.90, '#361a14']] },
+  tide:   { pts: [[0.10, 0.08, '#0f3f56'], [0.90, 0.12, '#1f7d8c'], [0.85, 0.90, '#6fc0ad'], [0.10, 0.92, '#0d2f45']] },
+  // neutral - safe under anything
+  slate:  { pts: [[0.12, 0.10, '#3a4250'], [0.88, 0.14, '#59636f'], [0.86, 0.90, '#2c333d'], [0.14, 0.88, '#454e5b']] },
+  // for LIGHT app UIs - a dark ground makes a white window read as paper
+  noir:   { pts: [[0.15, 0.12, '#1b1d22'], [0.85, 0.10, '#2b2f38'], [0.88, 0.92, '#101216'], [0.10, 0.90, '#23262e']] },
+  linen:  { pts: [[0.12, 0.10, '#e8dcc6'], [0.88, 0.12, '#f2ece0'], [0.85, 0.90, '#d8c7ab'], [0.12, 0.90, '#efe6d4']] },
+};
+
+/** Pick a backdrop from how bright the recording actually is. */
+export async function pickBackdrop(framePath) {
+  const py = `
+from PIL import Image
+im = Image.open(${JSON.stringify(framePath)}).convert('L').resize((64, 36))
+px = list(im.getdata())
+print(sum(px) / len(px))`;
+  const { stdout } = await run('python3', ['-c', py]);
+  const lum = parseFloat(stdout.trim());
+  // dark app -> rich, lighter ground; light app -> dark ground. Matches the
+  // standard guidance that a background exists to separate, not to blend.
+  return lum < 90 ? 'dusk' : lum > 170 ? 'noir' : 'slate';
+}
+
+/** @param spec  "dusk" | "#101010" | "/path/to/wallpaper.png" | "blur" */
+export async function makeBackdrop({ dir, w, h, spec }) {
+  mkdirSync(dir, { recursive: true });
+  const key = spec.replace(/[^a-z0-9]/gi, '_');
+  const out = join(dir, `bg-${key}-${w}x${h}.png`);
+  if (existsSync(out)) return out;
+
+  if (/^[#][0-9a-f]{6}$/i.test(spec)) {
+    await run('python3', ['-c', `
+from PIL import Image
+Image.new('RGB', (${w}, ${h}), ${JSON.stringify(spec)}).save(${JSON.stringify(out)})`]);
+    return out;
+  }
+  if (!BACKDROPS[spec]) {              // treat anything else as an image path
+    await run('python3', ['-c', `
+from PIL import Image
+im = Image.open(${JSON.stringify(spec)}).convert('RGB')
+tw, th = ${w}, ${h}
+s = max(tw / im.width, th / im.height)
+im = im.resize((max(tw, int(im.width * s)), max(th, int(im.height * s))), Image.LANCZOS)
+l = (im.width - tw) // 2; t = (im.height - th) // 2
+im.crop((l, t, l + tw, t + th)).save(${JSON.stringify(out)})`]);
+    return out;
+  }
+
+  const pts = BACKDROPS[spec].pts;
+  const py = `
+from PIL import Image, ImageFilter
+import random
+W, H = 96, 54                                   # render small, upscale smooth
+pts = ${JSON.stringify(pts.map(([x, y, c]) => [x, y, c]))}
+def rgb(h): h = h.lstrip('#'); return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+cols = [(p[0], p[1], rgb(p[2])) for p in pts]
+im = Image.new('RGB', (W, H))
+px = im.load()
+for y in range(H):
+    for x in range(W):
+        u, v = x / (W - 1), y / (H - 1)
+        acc = [0.0, 0.0, 0.0]; tot = 0.0
+        for cx, cy, c in cols:
+            d = (u - cx) ** 2 + (v - cy) ** 2 + 0.015   # +eps: no hot spikes
+            w_ = 1.0 / (d * d)
+            tot += w_
+            for i in range(3): acc[i] += c[i] * w_
+        px[x, y] = tuple(int(max(0, min(255, a / tot))) for a in acc)
+im = im.resize((${w}, ${h}), Image.LANCZOS).filter(ImageFilter.GaussianBlur(${Math.round(w / 90)}))
+# Flat gradients band after x264; a little grain dithers the steps away.
+random.seed(7)
+g = im.load()
+for y in range(0, ${h}):
+    for x in range(0, ${w}, 1):
+        n = random.randint(-3, 3)
+        r, gg, b = g[x, y]
+        g[x, y] = (max(0, min(255, r + n)), max(0, min(255, gg + n)), max(0, min(255, b + n)))
+im.save(${JSON.stringify(out)})
+print('ok')`;
+  await run('python3', ['-c', py]);
+  return out;
+}
+
 export function buildGraph({
   srcW, srcH, outW, outH, fps, clicks, rippleCount, cursorH,
   // Composite at capture resolution. Building at 1080p and letting zoompan
@@ -94,7 +194,7 @@ export function buildGraph({
   // viewer is looking closest. Instead we crop from the full-res canvas and
   // downscale ONCE, at the end.
   inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0.4, minGapMs = 1500,
-  blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize,
+  blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
 }) {
   const parts = [];
   // Cursor and click pulses are already composited into the frames by
@@ -108,13 +208,23 @@ export function buildGraph({
   const fgH = even(Math.round(fgW * (srcH / srcW)));
   const ox = Math.round((compW - fgW) / 2);
   const oy = Math.round((compH - fgH) / 2);
-  const M = 1, S = 2; // inputs: 0 frames, 1 mask, 2 shadow
+  const M = 1, S = 2, B = 3; // inputs: 0 frames, 1 mask, 2 shadow, 3 backdrop
 
+  if (backdrop) {
+    // A still wallpaper. It has to be scaled here rather than pre-sized,
+    // because zoompan crops from this canvas at composite resolution.
+    parts.push(
+      `[${B}:v]scale=${compW}:${compH}:flags=lanczos,setsar=1[bg]`,
+      `[withcur]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
+  } else {
+    // Legacy: blur the recording behind itself. Kept for --bg blur.
+    parts.push(
+      `[withcur]split=2[fga_src][bg_src]`,
+      `[bg_src]scale=${compW}:${compH}:force_original_aspect_ratio=increase,crop=${compW}:${compH},` +
+        `gblur=sigma=${Math.round(blurSigma * (compW / 1920))},eq=brightness=-${bgDim}:saturation=${bgSat}[bg]`,
+      `[fga_src]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
+  }
   parts.push(
-    `[withcur]split=2[fga_src][bg_src]`,
-    `[bg_src]scale=${compW}:${compH}:force_original_aspect_ratio=increase,crop=${compW}:${compH},` +
-      `gblur=sigma=${Math.round(blurSigma * (compW / 1920))},eq=brightness=-${bgDim}:saturation=${bgSat}[bg]`,
-    `[fga_src]scale=${fgW}:${fgH}:flags=lanczos[fgs]`,
     `[${M}:v]scale=${fgW}:${fgH}[mk]`,
     `[fgs][mk]alphamerge[fga]`,
     `[bg][${S}:v]overlay=${ox - pad}:${oy - pad}[bgs]`,
@@ -179,6 +289,14 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const framesDir = existsSync(join(shotDir, 'frames-cur'))
     ? join(shotDir, 'frames-cur') : join(shotDir, 'frames');
 
+  // Backdrop. "auto" reads the recording's own brightness and picks a ground
+  // that separates from it, rather than one that blends into it.
+  let bgSpec = opts.bg ?? 'auto';
+  const firstFrame = join(framesDir, `f${String(man.frames[0].i).padStart(5, '0')}.png`);
+  if (bgSpec === 'auto') bgSpec = await pickBackdrop(firstFrame);
+  const backdrop = bgSpec === 'blur' ? null
+    : await makeBackdrop({ dir: assetDir, w: srcW, h: srcH, spec: bgSpec });
+
   // concat with real per-frame durations so wall-clock timing survives.
   // The last frame is special: the screencast stops emitting once the page
   // stops repainting, so a held payoff has no frames behind it. `endMs` says
@@ -197,7 +315,7 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
 
   const graph = buildGraph({
     srcW, srcH, outW, outH, fps, clicks,
-    pad, ...opts,
+    pad, ...opts, backdrop,
   });
   const gp = join(assetDir, 'graph.txt');
   writeFileSync(gp, graph);
@@ -206,12 +324,13 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
     '-sws_flags', 'lanczos+accurate_rnd+full_chroma_int',
     '-f', 'concat', '-safe', '0', '-i', lp,
     '-i', mask, '-i', shadow,
+    ...(backdrop ? ['-i', backdrop] : []),
     '-filter_complex_script', gp, '-map', '[out]',
     '-c:v', 'libx264', '-preset', 'slower', '-crf', String(crf),
     '-x264-params', 'aq-mode=3:psy-rd=0.4:deblock=-1,-1',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', output];
   await run('ffmpeg', args, { maxBuffer: 1 << 26 });
-  return { output, srcW, srcH, outW, outH, frames: man.frames.length, clicks, graphLength: graph.length };
+  return { output, srcW, srcH, outW, outH, frames: man.frames.length, clicks, backdrop: bgSpec, graphLength: graph.length };
 }
 
 export async function makeAssets({ dir, w, h, radius = 18, pad = 40, shadowAlpha = 110, shadowBlur = 22, shadowDy = 14 }) {

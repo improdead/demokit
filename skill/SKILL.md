@@ -336,12 +336,20 @@ common way this goes wrong.
 
 | knob | default | raise it when |
 | --- | --- | --- |
+| `--bg` | `auto` | the ground fights the UI — see below |
 | `--level` | 1.35 | detail is too small to read |
 | `--inset` | 0.84 | the window feels cramped in frame |
 | `--bias` | 0.4 | zooms on edge elements push the window off-screen |
 | `--gap` | 1500 | beats are merging into one long zoom |
 | `--keep` | 1.35 | the cut feels rushed around an action |
 | `--speed` | 4 | there is a long wait to compress |
+
+**Backdrop.** `auto` reads the recording's own brightness and picks a ground that separates from
+it: a dark app gets `dusk`, a light one gets `noir`, anything in between gets `slate`. Override with
+`--bg dusk|ember|tide|slate|noir|linen`, `--bg '#101014'`, `--bg path/to/wallpaper.png`, or
+`--bg blur` for the old blur-behind-itself. Pick a ground that **contrasts** with the app — a dark
+app on a dark ground has no edge and the whole frame reads as murk. Match the product's accent
+colour only if it does not also match its background.
 
 **If any frame ever contained a live credential, treat it as compromised.** Tell the user to rotate
 it, and delete `.cache/shot-<name>/frames` — those are full-resolution unredacted PNGs, and deleting

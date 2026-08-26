@@ -141,8 +141,23 @@ node src/demo.mjs <shotDir> <out.mp4>
   --level 1.35   zoom depth          --inset 0.84  window size within the frame
   --bias 0.4     pull toward centre  --gap 1500    merge beats closer than this (ms)
   --keep 1.35    normal-speed pad    --speed 4     idle speed-up
-  --w 1920 --h 1080                  delivery size
+  --bg auto      backdrop            --w 1920 --h 1080   delivery size
 ```
+
+## The backdrop
+
+`--bg` takes a preset (`dusk` `ember` `tide` `slate` `noir` `linen`), a hex colour, an image path,
+or `blur`. Default is `auto`: it measures the first frame's mean luminance and picks a ground that
+*separates* from the recording — dark app gets `dusk`, light app gets `noir`, mid gets `slate`.
+
+The original default blurred the recording behind itself, which is the one option Screen Studio
+does **not** ship (it is an open feature request there, next to the colour-extraction alternative).
+The reason is visible the moment you try it on a dark app: the window dissolves into the smear and
+the drop shadow has nothing to fall on.
+
+The presets are mesh gradients — a few colour points blended by inverse-square distance, rendered
+at 96×54 and upscaled with lanczos, which is how you get a smooth wallpaper without banding. Grain
+is added last, because a flat gradient bands badly at 8-bit once x264 has been at it.
 
 ## Sharpness — where it actually goes
 

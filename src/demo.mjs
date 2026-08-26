@@ -18,7 +18,8 @@ const ASSETS = join(HERE, '..', '.assets');
 
 const [, , shotArg, outArg, ...rest] = process.argv;
 if (!shotArg || !outArg) {
-  console.error('usage: demo.mjs <shotDir> <out.mp4> [--level N --inset N --bias N --gap MS --keep S --speed N]');
+  console.error('usage: demo.mjs <shotDir> <out.mp4> [--level N --inset N --bias N --gap MS --keep S --speed N --bg NAME]');
+  console.error('  --bg  auto (default) | dusk ember tide slate noir linen | #rrggbb | <image.png> | blur');
   process.exit(2);
 }
 const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
@@ -41,8 +42,9 @@ const r = await render({
   inset: Number(arg('inset', '0.8')),
   centerBias: Number(arg('bias', '0.4')),
   minGapMs: Number(arg('gap', '1500')),
+  bg: arg('bg', 'auto'),
 });
-console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.clicks.length} click(s)`);
+console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.clicks.length} click(s), backdrop=${r.backdrop}`);
 
 const clicks = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8')).clicks
   .map((c) => ({ ...c, atMs: c.t }));
