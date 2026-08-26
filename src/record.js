@@ -265,13 +265,24 @@ async function runStep(s, label) {
       await glide(c.x, c.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 380);
       if (await occluded(s, c.x, c.y)) console.log('NOTE: ' + s.sel + ' is covered at that point');
-      if (s.beat !== false) mark(c.x, c.y, label);
+      // "beatAfter" moves the zoom anchor to AFTER the dwell. A beat marks the
+      // moment the step fires, and the zoom envelope is centred on it - so when
+      // the result takes a moment to arrive, the push-in peaks on a loading
+      // skeleton instead of the thing that loaded. Use it on any step whose
+      // payoff is what comes back, not the click itself.
+      if (s.beat !== false && !s.beatAfter) mark(c.x, c.y, label);
       act('click', c.x, c.y, label);
       await loc(s).click().catch(function () {});
       if (s.do === 'type') {
         await page.keyboard.type(s.text, { delay: s.delay ?? 60 });
       }
       await dwell(s.ms ?? 1400);
+      if (s.beat !== false && s.beatAfter) {
+        // re-measure: the thing worth framing may have moved or resized
+        const nb = await box(s);
+        const nc = nb ? centre(nb) : c;
+        mark(s.beatSel ? nc.x : c.x, s.beatSel ? nc.y : c.y, label);
+      }
       return;
     }
 

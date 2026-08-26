@@ -103,18 +103,26 @@ print(json.dumps({
   }
 }
 
-export async function review({ shotDir, mp4 }) {
+export async function review({ shotDir, mp4, gap = 1500 }) {
   const man = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
-  const beats = (man.clicks || []).length;
+  const all = man.clicks || [];
   const m = await measure(mp4);
 
-  const gaps = (man.clicks || []).slice(1).map((c, i) => (c.t - man.clicks[i].t) / 1000);
+  // Measure the beats that actually produce a zoom. render.mjs drops any beat
+  // closer than --gap to the previous one, so checking raw manifest times
+  // reports a merge the renderer already handled - and no flag can fix it,
+  // because --gap is the thing doing the merging.
+  const kept = [];
+  for (const c of all) if (!kept.length || c.t - kept[kept.length - 1].t >= gap) kept.push(c);
+  const beats = kept.length;
+  const merged = all.length - kept.length;
+  const gaps = kept.slice(1).map((c, i) => (c.t - kept[i].t) / 1000);
   const checks = [
     ['duration', m.duration >= TARGET.minDur && m.duration <= TARGET.maxDur,
       `${m.duration.toFixed(1)}s (want ${TARGET.minDur}-${TARGET.maxDur})`,
       m.duration < TARGET.minDur ? { speed: -1, keep: +0.5 } : { speed: +1 }],
     ['beats', beats >= TARGET.minBeats && beats <= TARGET.maxBeats,
-      `${beats} (want ${TARGET.minBeats}-${TARGET.maxBeats})`, null],
+      `${beats} zooming${merged ? ` (${merged} merged by --gap)` : ''} (want ${TARGET.minBeats}-${TARGET.maxBeats})`, null],
     ['zoom lands', m.zoomRange > 12, `range ${m.zoomRange}px`, { level: +0.15 }],
     ['rest state', m.restFrac >= TARGET.restFrac,
       `${(m.restFrac * 100).toFixed(0)}% unzoomed (want >=${TARGET.restFrac * 100}%)`,
@@ -127,7 +135,7 @@ export async function review({ shotDir, mp4 }) {
       `longest still stretch ${m.maxStall.toFixed(2)}s (want <=${TARGET.maxStall})`,
       { speed: +1 }],
     ['beats spaced', !gaps.length || Math.min(...gaps) >= 1.8,
-      gaps.length ? `closest beats ${Math.min(...gaps).toFixed(1)}s apart` : 'n/a',
+      gaps.length ? `closest zooms ${Math.min(...gaps).toFixed(1)}s apart` : 'n/a',
       { gap: +400 }],
   ];
   return { m, beats, checks };
@@ -156,7 +164,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // frames on disk are untouched, so every round is a re-render not a re-shoot.
   const knob = { level: 1.4, gap: 1500, keep: 1.35, speed: 4 };
 
-  let r = await review({ shotDir, mp4 });
+  let r = await review({ shotDir, mp4, gap: knob.gap });
   console.log(`\nreview: ${mp4}`);
   let failed = report(r);
 
@@ -183,7 +191,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     await run('node', [join(HERE, 'demo.mjs'), shotDir, mp4,
       '--level', String(knob.level), '--gap', String(knob.gap),
       '--keep', String(knob.keep), '--speed', String(knob.speed)], { maxBuffer: 1 << 26 });
-    r = await review({ shotDir, mp4 });
+    r = await review({ shotDir, mp4, gap: knob.gap });
     failed = report(r);
     // A round that fixes nothing will not start fixing something on the next
     // one - the knobs only move in one direction. Stop and say so.
