@@ -6,9 +6,12 @@ rounded corners and a drop shadow, one synthetic cursor, click ripples, click-fo
 dead air compressed. No captions.
 
 ```bash
-cd .tools && npm i && cd ..          # vendored ffmpeg/ffprobe (no Homebrew needed)
-./bin/demokit probe https://app.example.com     # look before you plan
-./bin/demokit flows/example.json out/demo.mp4
+cd .tools && npm i && cd ..                      # vendored ffmpeg/ffprobe (no Homebrew needed)
+./bin/demokit probe https://app.example.com      # look before you plan
+./bin/demokit flows/example.json out/demo.mp4    # a web app
+./bin/demokit term "pytest -q" out/tests.mp4     # a CLI, rendered offscreen
+./bin/demokit screen out/app.mp4 --seconds 30    # a native app / the desktop
+./bin/demokit review .cache/shot-example out/demo.mp4 --fix
 ```
 
 That is the whole thing: it creates or reuses a headless playwriter session, captures, and renders.
@@ -201,6 +204,72 @@ true end of capture, so `render.mjs` holds the last frame instead of giving it `
 
 Budget roughly **6MB/s of capture** in full-resolution PNGs at 2560×1440.
 
+## Three capture sources, one pipeline
+
+Everything downstream only reads the **manifest** — `frames[]`, `clicks[]`,
+`path[]`, `endMs` — so any recorder that writes one gets the cursor, zoom,
+backdrop and pacing for free.
+
+| source | how | cursor | beats |
+| --- | --- | --- | --- |
+| `record.js` | CDP screencast of a browser tab | drawn from the logged path | from clicks |
+| `term.py` | runs the command in a pty, paints frames itself | none needed | from change detection |
+| `screen.mjs` | macOS `screencapture -v` | the real one, in the pixels | from change detection |
+
+**A terminal should not be screen-recorded.** The obvious approach — put a
+Terminal window on screen and film it — steals focus, captures whatever else is
+on the desktop, is pinned to the window's real size, and needs the
+screen-recording permission. `term.py` runs the command in a pty, keeps its own
+model of the screen (a small VT subset: SGR colour, cursor moves, erase) and
+paints frames with PIL. Nothing is displayed. It also draws its own window
+chrome — traffic lights and a title bar — which closes half the "no browser
+chrome" gap below, and it fits the window to the rows actually used so an
+8-line demo is not a mostly-empty rectangle.
+
+ffmpeg's `avfoundation` input is not used: it is killed on this machine
+(exit 137) even though the screen-recording permission is granted and
+`screencapture` works fine with it.
+
+## Beats from change, not just clicks
+
+`src/beats.py` diffs consecutive frames at ~8fps, thresholds, clusters the
+result in time, and puts a beat at the energy-weighted centroid of each cluster.
+That is what lets the zoom follow a line of terminal output appearing, or a
+panel filling in, with no cursor involved at all.
+
+It runs by default whenever `clicks` is empty. On a browser take, `--beats
+augment` adds change beats that landed away from any click. On a browser take it
+finds *fewer* beats than clicks does — a hover changes nothing on screen — which
+is the correct answer, not a bug.
+
+## Reviewing its own output
+
+```
+$ bin/demokit review .cache/shot-trident out/trident.mp4
+  PASS  duration           21.7s (want 20-75)
+  PASS  zoom lands         range 68px
+  PASS  rest state         51% unzoomed (want >=12%)
+  PASS  payoff hold        3.25s at rest at the end (want >=2.5)
+  PASS  something changed  max 90.03 mean-luma vs frame 0 (want >=6)
+  PASS  no dead air        longest still stretch 1.25s (want <=2.6)
+```
+
+None of these asks "does this look good" — that is the one question the thing
+that made the video cannot answer honestly about itself. Each is a number with a
+threshold. `--fix` re-renders with adjusted framing flags and re-measures, and
+stops as soon as a round improves nothing.
+
+Two things it gets right that are easy to get wrong:
+
+- **The window is found by detail, not brightness.** Thresholding luminance to
+  locate the inset window reports a bright gradient backdrop as content and
+  measures every frame as unzoomed. A smooth gradient has almost no vertical
+  gradient; UI content has plenty.
+- **Dead air excludes the tail.** The stall at the end is the payoff hold, which
+  is required to be 3-5s. Counting it as dead air makes two checks contradict
+  each other and no flag can satisfy both — the autotuner just raises `--speed`
+  forever against a stretch that pacing deliberately protects.
+
 ## ffmpeg traps
 
 **`crop` has no `eval` option on `ffmpeg-static` 6.0.** Anything built on `crop=…:eval=frame` dies
@@ -291,6 +360,10 @@ src/record.js    capture: CDP PNG screencast + dense pointer path (runs inside p
 src/cursor.py    draws cursor + click pulses onto the frames (per-frame, exact)
 src/render.mjs   frame, backdrop, shadow, zoom — one ffmpeg graph
 src/pace.mjs     idle speed-up (after zoom)
+src/term.py      offscreen terminal recorder: pty -> VT subset -> frames
+src/screen.mjs   desktop/region capture via macOS screencapture
+src/beats.py     beats from what changed, for captures with no click log
+src/review.mjs   objective checks on a finished video, and --fix to re-render
 src/demo.mjs     shot dir -> MP4
 vendor/          shallow clones kept for reference: playwriter, playwright-recast, openscreen
 .tools/          vendored ffmpeg + ffprobe
@@ -300,7 +373,10 @@ vendor/          shallow clones kept for reference: playwriter, playwright-recas
 ## Not done
 
 - **No browser chrome.** A tab screencast has no traffic lights or URL bar; the reference demos
-  lean on it. It would have to be drawn synthetically.
+  lean on it. It would have to be drawn synthetically — `term.py` already does this for terminals.
+- **`term.py` models a VT subset**, not a terminal. Scripted commands and their output render
+  correctly; a full-screen TUI (vim, htop) will not.
+- **`screen` is macOS only**, and unlike `term` it records the real display.
 - **No captions, audio, or text cards**, by design — every load-bearing fact has to be legible in
   the UI itself.
 - **Streaming responses can't be stubbed.** `route.fulfill` buffers, so an SSE/NDJSON progressive UI

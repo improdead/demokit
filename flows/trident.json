@@ -1,0 +1,29 @@
+{
+  "claim": "A security engineer who pentests once a quarter and triages scanner noise by hand will believe Trident sweeps 760 assets continuously and hands back the exploitable criticals with the proof already written.",
+  "_ledger": [
+    "S0  13k findings open, 633 critical, across 760 assets      <- the viewer's own backlog",
+    "S1  narrowed to one asset, 100 rows -> 3                     <- type in search",
+    "S2  one critical open: CVSS 9.8, CWE-798, SLA overdue 3d     <- click the finding",
+    "S3  the proof: the exact request, the token, the expiry      <- Technical Analysis  ** PAYOFF **",
+    "S4  and it hands to the agent                                <- Fix in agent (hover only, no mutation)"
+  ],
+  "url": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/surface/findings",
+  "layout": [1280, 720],
+  "zoom": 2,
+  "clearStorage": false,
+  "settleMs": 5000,
+  "tailMs": 3200,
+  "steps": [
+    { "do": "wait", "ms": 1800 },
+    { "do": "hover", "sel": "button:has-text(\"Critical\")", "label": "633 critical, open", "ms": 3200 },
+    { "do": "type", "sel": "[aria-label*=\"Search findings\"]", "text": "corvel", "delay": 95,
+      "label": "narrow to one asset", "ms": 4200 },
+    { "do": "click", "sel": "text=Anonymous Azure Container SAS Token Exposure", "label": "open the critical",
+      "ms": 4600, "expect": { "sel": "text=Technical Analysis", "timeout": 15000 } },
+    { "do": "hover", "sel": "text=CWE-798", "later": true, "label": "CVSS 9.8 · CWE-798", "ms": 4000 },
+    { "do": "scrollTo", "sel": "text=Technical Analysis", "later": true, "beat": false, "ms": 1300 },
+    { "do": "hover", "sel": "text=Technical Analysis", "later": true, "label": "the proof, already written", "ms": 6000 },
+    { "do": "scrollTo", "sel": "button:has-text(\"Fix in agent\")", "later": true, "beat": false, "ms": 1200 },
+    { "do": "hover", "sel": "button:has-text(\"Fix in agent\")", "later": true, "label": "hand it to the agent", "ms": 4500 }
+  ]
+}

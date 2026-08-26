@@ -2,6 +2,10 @@
 # demokit — flow JSON in, demo MP4 out.
 #
 #   bin/demokit probe <url>                              # look before you plan
+#   bin/demokit term "pytest -q" out.mp4                 # a terminal, rendered offscreen
+#   bin/demokit screen out.mp4 --seconds 30              # a native app / the desktop
+#   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
+#   bin/demokit --session <id> <flow.json> <out.mp4>     # record via real Chrome (auth)
 #   bin/demokit flows/example.json out.mp4 [--level 1.35 --inset 0.84 ...]
 #   bin/demokit --render-only .cache/shot-example out.mp4   # re-render, no recapture
 #
@@ -36,7 +40,24 @@ write_args() { mkdir -p .cache; node -e '
     process.argv.slice(1).map(a=>a.split("=")).filter(p=>p.length===2))));
 ' -- "$@"; }
 
+# Anything behind a login has to be recorded through the user's own Chrome:
+#   playwriter session new          (they click the extension on an authed tab)
+#   bin/demokit --session <id> flows/x.json out.mp4
+# Without this the CLI always made a fresh headless session, which is logged out.
+SESSION_OVERRIDE=""
+if [ "${1:-}" = "--session" ]; then shift; SESSION_OVERRIDE="${1:?--session needs an id}"; shift; fi
+
 ensure_session() {
+  if [ -n "$SESSION_OVERRIDE" ]; then
+    SESSION="$SESSION_OVERRIDE"
+    playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION" \
+      || die "no such playwriter session: $SESSION (run: playwriter session list)"
+    local cwd
+    cwd="$(playwriter session list 2>/dev/null | awk -v s="$SESSION" '$1==s {print $(NF-1)}')"
+    [ "$cwd" = "$PWD" ] || echo "demokit: WARNING session $SESSION is rooted at $cwd, not $PWD - frames will land there" >&2
+    echo "demokit: using session $SESSION"
+    return
+  fi
   SESSION="$(cat .cache/session 2>/dev/null || true)"
   if [ -z "$SESSION" ] || ! playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION"; then
     SESSION="$(playwriter session new --browser headless 2>&1 | grep -oE 'Session [0-9]+' | grep -oE '[0-9]+')"
@@ -53,6 +74,48 @@ if [ "${1:-}" = "probe" ]; then
   ensure_session
   write_args "url=$URL"
   exec playwriter -s "$SESSION" --timeout 180000 -f src/probe.js
+fi
+
+# Offscreen terminal recording: runs the command in a pty and paints frames
+# itself. Never touches the display, so it works in the background.
+if [ "${1:-}" = "term" ]; then
+  shift; CMD="${1:?usage: demokit term \"<shell command>\" <out.mp4> [--cols N --rows N --title T] [render flags]}"; shift
+  OUT="${1:?usage: demokit term \"<cmd>\" <out.mp4>}"; shift
+  SHOT=".cache/shot-term"
+  TERMARGS=(); RENDARGS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cols|--rows|--fps|--width|--title|--max-seconds) TERMARGS+=("$1" "$2"); shift 2;;
+      *) RENDARGS+=("$1"); shift;;
+    esac
+  done
+  python3 src/term.py "$SHOT" --cmd "$CMD" "${TERMARGS[@]+"${TERMARGS[@]}"}"
+  exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
+fi
+
+# Screen recording of a display or a region, for native apps that are not a
+# terminal. Uses macOS screencapture, which already holds the permission.
+if [ "${1:-}" = "screen" ]; then
+  shift; OUT="${1:?usage: demokit screen <out.mp4> --seconds N [--region x,y,w,h] [--display 1]}"; shift
+  SHOT=".cache/shot-screen"
+  SCRARGS=(); RENDARGS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --seconds|--display|--region|--fps) SCRARGS+=("$1" "$2"); shift 2;;
+      *) RENDARGS+=("$1"); shift;;
+    esac
+  done
+  node src/screen.mjs "$SHOT" "${SCRARGS[@]+"${SCRARGS[@]}"}"
+  exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
+fi
+
+# Measure a finished video against the objective checks, and optionally
+# re-render until they pass. Framing only - it will not pretend a knob can fix
+# a demo of the wrong thing.
+if [ "${1:-}" = "review" ]; then
+  shift; SHOT="${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}"; shift
+  OUT="${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}"; shift
+  exec node src/review.mjs "$SHOT" "$OUT" "$@"
 fi
 
 if [ "${1:-}" = "--render-only" ]; then

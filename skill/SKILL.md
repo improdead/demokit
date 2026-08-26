@@ -5,6 +5,19 @@ description: Plan and produce a polished product demo video by driving a browser
 
 # Making a demo video
 
+Works on three sources, all through the same pipeline:
+
+| what you are demoing | command |
+| --- | --- |
+| a web app | `bin/demokit flows/<name>.json out.mp4` (write a flow — §7) |
+| a CLI or a script | `bin/demokit term "<shell command>" out.mp4` |
+| a native app or the desktop | `bin/demokit screen out.mp4 --seconds 30` |
+
+`term` runs the command in a pty and paints the frames itself — nothing is
+displayed, so it records in the background while the machine is being used, and
+the output is crisp at any resolution instead of being pinned to a window's
+size. `screen` uses macOS `screencapture`, which does record the real display.
+
 A demo is an argument, not a recording. It proves **one claim** by walking a path through
 application states. You cannot argue about a product you have not looked at, and you cannot look at
 it with your imagination.
@@ -84,10 +97,21 @@ S3  PR opened, finding drops out of the queue             <- click "Open pull re
 - **Mark exactly one state the payoff.** Open on the state just before it; hold longest on it.
 - **Prefer a case with a real slow operation** — a visible working state and then a result is far
   more convincing than a cut, and `--speed` compresses the wait afterwards.
-- **One document per flow, hard.** `record.js` injects `html{zoom}`, `hide` and `redact` in a
-  single `addStyleTag` after load. A full-document navigation drops all three at once: resolution
-  silently halves and the rest of the take is un-redacted. In-page routing is fine; if the ledger
-  genuinely needs a second document, ship two videos.
+- **One *document* per flow.** `record.js` injects `html{zoom}`, `hide` and `redact` in a single
+  `addStyleTag` after load, so a **full-document** navigation drops all three at once: resolution
+  silently halves and the rest of the take is un-redacted. Client-side routing does **not** — a
+  Next.js soft nav from a list to a detail route keeps every injected style (verified against a
+  live Next.js app: `zoom` and the style tags both survived a route change). So a multi-page flow
+  is fine inside an SPA and fatal across a real page load. If you are not sure which one the app
+  does, check before writing the flow:
+  ```bash
+  playwriter -s <id> -e 'const p=await context.newPage();
+    await p.goto(URL); await p.addStyleTag({content:"html{zoom:1.25}"});
+    await p.locator(SEL).click(); await p.waitForTimeout(3000);
+    console.log(await p.evaluate(()=>getComputedStyle(document.documentElement).zoom));'
+  ```
+  `1.25` means client-side routing and the flow is safe; `1` (or `normal`) means a real navigation,
+  so split it into two videos.
 
 ## 4. Guarantee the preconditions
 
@@ -95,8 +119,17 @@ Everything below lives in the flow's `seed` block, installed as init scripts **b
 Init scripts survive the `clearStorage` reload; anything you do with `page.evaluate` after load
 does not.
 
-**Session.** `verdict.looksAuthWalled` → record through the user's real Chrome (`playwriter session
-new`, they click the extension on an authenticated tab) **and set `"clearStorage": false`**.
+**Session.** `verdict.looksAuthWalled` → record through the user's real Chrome, and pass the
+session explicitly:
+
+```bash
+playwriter session new                    # from demokit/ — the user clicks the extension on an authed tab
+bin/demokit --session <id> probe <url>
+bin/demokit --session <id> flows/<name>.json out/demo.mp4
+```
+
+Without `--session` the CLI makes its own headless session, which is logged out. Also set
+**`"clearStorage": false`**.
 Otherwise the recorder clears `sessionStorage` and reloads, silently logging out any app that keeps
 its token there — which presents as every selector missing, and gets misdiagnosed as a selector bug.
 
@@ -281,9 +314,21 @@ Preflight has three causes and three different fixes:
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| everything missing, `authHints` in the probe | auth wall | real Chrome + `"clearStorage": false` |
+| everything missing, `authHints` in the probe | auth wall | `--session <id>` + `"clearStorage": false` |
 | row/list selectors missing, `looksEmpty` | S0 does not exist | seed it (§4–5) |
 | only later-step selectors missing | that state is not rendered yet | `"later": true` on those steps |
+
+## 8b. Beats without a cursor
+
+A click is a good beat when there is a cursor to log. A terminal printing
+output, a chart redrawing, a build finishing — none of those have one, and the
+interesting moment is a *region of pixels changing*. `src/beats.py` finds those
+and the zoom pushes into them.
+
+It runs automatically whenever a capture has no click log (`term`, `screen`).
+On a browser take, add it to the click beats with `--beats augment`, or turn it
+off with `--beats off`. It deliberately finds fewer beats than clicks does on a
+browser take, because a hover changes nothing on screen — which is the point.
 
 ## 9. Verify — objective checks, not "look at it"
 
@@ -293,7 +338,20 @@ Extract frame 0, 0.8s, every `clicks[].t` from `.cache/shot/manifest.json`, and 
 ffmpeg -y -loglevel error -ss $ts -i out/demo.mp4 -frames:v 1 /tmp/f_$ts.png </dev/null
 ```
 
-Then, in order — each of these has a pass/fail answer rather than an opinion:
+Most of this is automated. Run it first, and only inspect by eye what it cannot judge:
+
+```bash
+bin/demokit review .cache/shot-<name> out/demo.mp4          # measure
+bin/demokit review .cache/shot-<name> out/demo.mp4 --fix    # measure, re-render, re-measure
+```
+
+`--fix` only ever moves **framing** flags, and it stops as soon as a round fixes
+nothing rather than grinding. If `something changed` fails it says so explicitly
+and refuses to tune: that is a story failure, and no knob repairs a demo of the
+wrong thing.
+
+The checks below are what it measures, plus the four it cannot — 1, 6, 8 and 10
+still need you:
 
 1. **Ledger replay.** For every S(n) in §3, name the timestamp where that state is visible. A state
    you cannot point at is a failed demo, not a pacing problem.

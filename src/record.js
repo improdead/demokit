@@ -101,6 +101,11 @@ if (flow.clearStorage !== false) {
 // Hide noise, blur anything sensitive. Done in the page BEFORE capture, so the
 // pixels never exist in a frame - safer than blurring a region afterwards.
 const css = ['html{zoom:' + ZOOM + '}'];
+// playwriter's extension injects TWO overlays into the page when it drives the
+// user's real Chrome: a ghost cursor (a second cursor beside the one we draw)
+// and a toolbar badge pinned top-right. Neither exists in a headless run, so
+// they only appear on the auth path - and they burn into every frame.
+css.push('#__playwriter_ghost_cursor__,[data-playwriter-toolbar]{display:none !important}');
 if (flow.hide && flow.hide.length) css.push(flow.hide.join(',') + '{visibility:hidden !important}');
 if (flow.redact && flow.redact.length) css.push(flow.redact.join(',') + '{filter:blur(9px) !important}');
 if (flow.stillness !== false) css.push('*,*::before,*::after{scroll-behavior:auto !important}');

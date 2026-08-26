@@ -19,7 +19,8 @@ const ASSETS = join(HERE, '..', '.assets');
 const [, , shotArg, outArg, ...rest] = process.argv;
 if (!shotArg || !outArg) {
   console.error('usage: demo.mjs <shotDir> <out.mp4> [--level N --inset N --bias N --gap MS --keep S --speed N --bg NAME]');
-  console.error('  --bg  auto (default) | dusk ember tide slate noir linen | #rrggbb | <image.png> | blur');
+  console.error('  --bg     auto (default) | dusk ember tide slate noir linen | #rrggbb | <image.png> | blur');
+  console.error('  --beats  off | auto (replace clicks with change-detected beats) | augment');
   process.exit(2);
 }
 const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
@@ -28,11 +29,33 @@ const shotDir = resolve(shotArg), outPath = resolve(outArg);
 mkdirSync(dirname(outPath), { recursive: true });
 const stage = join(ASSETS, 'stage.mp4');
 
+const runp = promisify(execFile);
+const man0 = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
+
+// Beats from what CHANGED, for captures with no click log (a screen recording),
+// or to augment clicks when asked. A hover changes nothing on screen, so this
+// finds fewer beats than clicks does on a browser take - by design.
+// Default on whenever there is no click log at all - that covers every capture
+// source that isn't the browser recorder, present and future.
+const noClicks = !(man0.clicks || []).length;
+if (arg('beats', noClicks ? 'auto' : 'off') !== 'off') {
+  const mode = arg('beats', noClicks ? 'auto' : 'augment');
+  const b = await runp('python3', [join(HERE, 'beats.py'), shotDir,
+    '--max', arg('maxbeats', '6'), '--gap', arg('gap', '1500'),
+    ...(mode === 'augment' ? ['--augment'] : ['--merge'])], { maxBuffer: 1 << 26 });
+  process.stdout.write(b.stdout);
+}
+
 // Pass 1: draw the cursor and click pulses onto the frames from the dense
 // pointer path. Must happen before compositing so they scale with the window.
-const runp = promisify(execFile);
-const cur = await runp('python3', [join(HERE, 'cursor.py'), shotDir], { maxBuffer: 1 << 26 });
-process.stdout.write(cur.stdout);
+// A screen recording already has the real cursor in the pixels - drawing a
+// second one there is the exact bug this tool exists to avoid.
+if ((man0.path || []).length) {
+  const cur = await runp('python3', [join(HERE, 'cursor.py'), shotDir], { maxBuffer: 1 << 26 });
+  process.stdout.write(cur.stdout);
+} else {
+  console.log('cursor pass: skipped (no pointer path - real cursor is in the frames)');
+}
 
 const r = await render({
   shotDir, output: stage, assetDir: ASSETS,
