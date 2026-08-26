@@ -1,0 +1,13 @@
+{
+  "url": "http://localhost:8891/",
+  "layout": [1280, 720],
+  "zoom": 2,
+  "steps": [
+    { "do": "wait", "ms": 900 },
+    { "do": "hover", "sel": ".sticker", "nth": 1, "outward": true, "label": "sticker lights up" },
+    { "do": "drag",  "sel": ".sticker", "nth": 1, "by": [-190, 92], "label": "drag it anywhere" },
+    { "do": "scrollTo", "sel": ".ascii-band" },
+    { "do": "pulse", "sel": ".ascii-band", "label": "scan the terminal field" },
+    { "do": "click", "sel": ".rail a[href=\"#career\"]", "label": "jump to Career" }
+  ]
+}

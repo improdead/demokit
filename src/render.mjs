@@ -89,6 +89,10 @@ function pathExpr(clicks, key, travel = 0.45) {
 
 export function buildGraph({
   srcW, srcH, outW, outH, fps, clicks, rippleCount, cursorH,
+  // Composite at capture resolution. Building at 1080p and letting zoompan
+  // upscale 1.35x throws away the 2560 capture at exactly the moment the
+  // viewer is looking closest. Instead we crop from the full-res canvas and
+  // downscale ONCE, at the end.
   inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0.4, minGapMs = 1500,
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize,
 }) {
@@ -115,18 +119,19 @@ export function buildGraph({
   const hx = Math.round(cursorH * 0.18), hy = Math.round(cursorH * 0.18);
   parts.push(`${cur}[1:v]overlay=x='${pathExpr(clicks, 'x')}-${hx}':y='${pathExpr(clicks, 'y')}-${hy}'[withcur]`);
 
-  // ---- frame composite -----------------------------------------------------
-  const fgW = even(Math.round(outW * inset));
+  // ---- frame composite (at capture resolution) -----------------------------
+  const compW = srcW, compH = srcH;
+  const fgW = even(Math.round(compW * inset));
   const fgH = even(Math.round(fgW * (srcH / srcW)));
-  const ox = Math.round((outW - fgW) / 2);
-  const oy = Math.round((outH - fgH) / 2);
+  const ox = Math.round((compW - fgW) / 2);
+  const oy = Math.round((compH - fgH) / 2);
   const M = rippleCount + 2, S = rippleCount + 3; // mask, shadow input indices
 
   parts.push(
     `[withcur]split=2[fga_src][bg_src]`,
-    `[bg_src]scale=${outW}:${outH}:force_original_aspect_ratio=increase,crop=${outW}:${outH},` +
-      `gblur=sigma=${blurSigma},eq=brightness=-${bgDim}:saturation=${bgSat}[bg]`,
-    `[fga_src]scale=${fgW}:${fgH}[fgs]`,
+    `[bg_src]scale=${compW}:${compH}:force_original_aspect_ratio=increase,crop=${compW}:${compH},` +
+      `gblur=sigma=${Math.round(blurSigma * (compW / 1920))},eq=brightness=-${bgDim}:saturation=${bgSat}[bg]`,
+    `[fga_src]scale=${fgW}:${fgH}:flags=lanczos[fgs]`,
     `[${M}:v]scale=${fgW}:${fgH}[mk]`,
     `[fgs][mk]alphamerge[fga]`,
     `[bg][${S}:v]overlay=${ox - pad}:${oy - pad}[bgs]`,
@@ -138,7 +143,10 @@ export function buildGraph({
   for (const c of clicks) {
     if (!kept.length || c.t - kept[kept.length - 1].t >= minGapMs) kept.push(c);
   }
-  if (!kept.length) { parts.push(`[flat]null[out]`); return parts.join(';'); }
+  if (!kept.length) {
+    parts.push(`[flat]scale=${outW}:${outH}:flags=lanczos[out]`);
+    return parts.join(';');
+  }
 
   const sx = fgW / srcW, sy = fgH / srcH;
   const tv = `(in/${fps})`;
@@ -150,19 +158,24 @@ export function buildGraph({
   const envMax = envs.reduce((a, e) => (a ? `max(${a},${e})` : e), '');
   const sum = envs.map((e) => `(${e})`).join('+');
   const bias = (v) => (v * (1 - centerBias) + 0.5 * centerBias).toFixed(5);
-  const wx = kept.map((c, i) => `(${envs[i]})*${bias((ox + c.x * sx) / outW)}`).join('+');
-  const wy = kept.map((c, i) => `(${envs[i]})*${bias((oy + c.y * sy) / outH)}`).join('+');
+  const wx = kept.map((c, i) => `(${envs[i]})*${bias((ox + c.x * sx) / compW)}`).join('+');
+  const wy = kept.map((c, i) => `(${envs[i]})*${bias((oy + c.y * sy) / compH)}`).join('+');
   const z = `(1+(${level}-1)*(${envMax}))`;
 
+  // zoompan can't zoom below 1.0, so it runs at the composite size and the
+  // single downscale to the delivery size happens after it. At max zoom the
+  // cropped region is ~compW/level wide, which lands near 1:1 with the output
+  // instead of being blown up.
   parts.push(
     `[flat]zoompan=z='${z}'` +
     `:x='max(0,min(((${wx})/max(${sum},0.0001))*iw*zoom-ow/2,iw*zoom-ow))'` +
     `:y='max(0,min(((${wy})/max(${sum},0.0001))*ih*zoom-oh/2,ih*zoom-oh))'` +
-    `:d=1:s=${outW}x${outH}:fps=${fps}[out]`);
+    `:d=1:s=${compW}x${compH}:fps=${fps}[zoomed]`,
+    `[zoomed]scale=${outW}:${outH}:flags=lanczos[out]`);
   return parts.join(';');
 }
 
-export async function render({ shotDir, output, assetDir, fps = 30, crf = 17, ...opts }) {
+export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ...opts }) {
   mkdirSync(assetDir, { recursive: true });
   const man = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
   const { width: srcW, height: srcH } = man;
@@ -176,9 +189,13 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 17, ..
   const cursor = await makeCursor(assetDir, cursorH);
   const ripples = await makeRipples(assetDir, 7, rippleMax);
 
-  const fgW = even(Math.round(outW * (opts.inset ?? 0.8)));
+  const fgW = even(Math.round(srcW * (opts.inset ?? 0.8)));
   const fgH = even(Math.round(fgW * (srcH / srcW)));
-  const { mask, shadow, pad } = await makeAssets({ dir: assetDir, w: fgW, h: fgH });
+  const { mask, shadow, pad } = await makeAssets({
+    dir: assetDir, w: fgW, h: fgH,
+    radius: Math.round(18 * (srcW / 1920)), pad: Math.round(40 * (srcW / 1920)),
+    shadowBlur: Math.round(22 * (srcW / 1920)), shadowDy: Math.round(14 * (srcW / 1920)),
+  });
 
   // concat with real per-frame durations so wall-clock timing survives
   const list = man.frames.map((f, i) => {
@@ -199,10 +216,12 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 17, ..
   writeFileSync(gp, graph);
 
   const args = ['-y', '-hide_banner', '-loglevel', 'error',
+    '-sws_flags', 'lanczos+accurate_rnd+full_chroma_int',
     '-f', 'concat', '-safe', '0', '-i', lp,
     '-i', cursor, ...ripples.flatMap((r) => ['-i', r]), '-i', mask, '-i', shadow,
     '-filter_complex_script', gp, '-map', '[out]',
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf),
+    '-c:v', 'libx264', '-preset', 'slower', '-crf', String(crf),
+    '-x264-params', 'aq-mode=3:psy-rd=0.4:deblock=-1,-1',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', output];
   await run('ffmpeg', args, { maxBuffer: 1 << 26 });
   return { output, srcW, srcH, outW, outH, frames: man.frames.length, clicks, graphLength: graph.length };

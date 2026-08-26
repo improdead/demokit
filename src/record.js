@@ -1,161 +1,190 @@
 /**
- * Capture a flow as full-resolution PNG frames + an exact click log.
+ * Capture a flow as full-resolution PNG frames + a beat log.
  *
- * Run inside playwriter:  playwriter -s <id> -f src/record.js
+ *   DEMOKIT_FLOW=flows/example.json playwriter -s <id> -f src/record.js
  *
- * Why not Playwright's trace screencast: it is hard-capped at 800x450 JPEG
- * (it exists to feed the trace viewer). The `frames` metadata reports the page
- * size, which is misleading - the stored images are 800px. Anything built on
- * it is upscaling a lossy thumbnail.
+ * Two things that are not obvious and cost real time to discover:
  *
- * CDP Page.startScreencast with format:'png' and explicit maxWidth/maxHeight
- * gives lossless frames at the real viewport size, and we ack each frame so
- * Chrome keeps sending them.
+ * 1. Playwright's trace screencast is hard-capped at 800x450 JPEG - it exists
+ *    to feed the trace viewer. Its metadata reports the PAGE size, which hides
+ *    this. Anything built on it is upscaling a thumbnail.
+ * 2. Page.startScreencast captures CSS pixels and ignores deviceScaleFactor
+ *    (and Playwright re-applies its own metrics on navigate, wiping any
+ *    override). To get 2x pixels: a 2x viewport plus `html{zoom:2}`. The page
+ *    lays out as if it were `layout` wide but renders at 2x.
+ *    getBoundingClientRect returns zoomed coords, so beats stay 1:1 with frame
+ *    pixels and need no rescaling downstream.
  */
 const fs = require('node:fs');
 
 const OUT = process.env.DEMOKIT_OUT || '.cache/shot';
-// Capture at 2x the layout we want, then apply CSS zoom so the page lays out
-// as if it were LAYOUT_W wide. Two problems solved at once:
-//   - resolution: frames are 2560x1440, downscaled to 1080p on output
-//   - scale: content fills the frame instead of a 680px column floating in 1920
-// Note: Page.startScreencast captures CSS pixels and IGNORES deviceScaleFactor,
-// so setDeviceMetricsOverride does not help here - CSS zoom does.
-const ZOOM = Number(process.env.DEMOKIT_ZOOM || 2);
-const LAYOUT_W = Number(process.env.DEMOKIT_W || 1280);
-const LAYOUT_H = Number(process.env.DEMOKIT_H || 720);
-const W = LAYOUT_W * ZOOM;
-const H = LAYOUT_H * ZOOM;
-const URL = process.env.DEMOKIT_URL || 'http://localhost:8891/';
+const FLOW_PATH = process.env.DEMOKIT_FLOW || 'flows/example.json';
+
+const flow = JSON.parse(fs.readFileSync(FLOW_PATH, 'utf8'));
+const ZOOM = flow.zoom ?? 2;
+const LW = (flow.layout ?? [1280, 720])[0];
+const LH = (flow.layout ?? [1280, 720])[1];
+const W = LW * ZOOM, H = LH * ZOOM;
 
 fs.rmSync(OUT, { recursive: true, force: true });
-fs.mkdirSync(`${OUT}/frames`, { recursive: true });
+fs.mkdirSync(OUT + '/frames', { recursive: true });
 
-state.page2 = await context.newPage();
-const page = state.page2;
+const page = await context.newPage();
+state.recordPage = page;
 await page.setViewportSize({ width: W, height: H });
-await page.goto(URL, { waitUntil: 'domcontentloaded' });
-await page.waitForTimeout(1200);
+await page.goto(flow.url, { waitUntil: flow.waitUntil || 'domcontentloaded' });
+await page.waitForTimeout(flow.settleMs ?? 1200);
 
-// Start from a clean slate: the page persists dragged sticker positions.
-await page.evaluate(() => { try { localStorage.clear(); } catch {} });
-await page.reload({ waitUntil: 'domcontentloaded' });
-await page.waitForTimeout(700);
-await page.addStyleTag({ content: `html{zoom:${ZOOM}}` });
-await page.waitForTimeout(600);
+if (flow.clearStorage !== false) {
+  // Pages that persist UI state would otherwise start mid-state on take 2.
+  await page.evaluate(() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+}
+await page.addStyleTag({ content: 'html{zoom:' + ZOOM + '}' });
+await page.waitForTimeout(500);
+
+const loc = (s) => (s.nth == null ? page.locator(s.sel).first() : page.locator(s.sel).nth(s.nth));
+const box = async (s) => await loc(s).boundingBox().catch(() => null);
+
+// ---- preflight: fail loudly BEFORE burning a capture -----------------------
+const missing = [];
+for (const s of flow.steps) {
+  if (!s.sel) continue;
+  if (!(await box(s))) missing.push(s.do + ' ' + s.sel + (s.nth != null ? ' [nth=' + s.nth + ']' : ''));
+}
+if (missing.length && !flow.allowMissing) {
+  console.log('PREFLIGHT FAILED - these selectors matched nothing:');
+  for (const m of missing) console.log('  -', m);
+  console.log('Fix the flow, or set "allowMissing": true to skip them.');
+  await page.close();
+} else {
+
+// ---- capture ---------------------------------------------------------------
 const cdp = await getCDPSession({ page });
-
 const frames = [];
 let n = 0;
+let writeErr = null;
 cdp.on('Page.screencastFrame', async (f) => {
   const i = n++;
-  fs.writeFileSync(`${OUT}/frames/f${String(i).padStart(5, '0')}.png`, Buffer.from(f.data, 'base64'));
-  frames.push({ i, t: f.metadata.timestamp });
-  try { await cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }); } catch {}
+  try {
+    fs.writeFileSync(OUT + '/frames/f' + String(i).padStart(5, '0') + '.png', Buffer.from(f.data, 'base64'));
+    frames.push({ i: i, t: f.metadata.timestamp });
+  } catch (e) { writeErr = writeErr || e; }
+  try { await cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }); } catch (e) {}
 });
-
-await cdp.send('Page.startScreencast', {
-  format: 'png', maxWidth: W, maxHeight: H, everyNthFrame: 1,
-});
+await cdp.send('Page.startScreencast', { format: 'png', maxWidth: W, maxHeight: H, everyNthFrame: 1 });
 
 const t0 = Date.now();
-const clicks = [];
+const beats = [];
+const mark = (x, y, label) => beats.push({ x: Math.round(x), y: Math.round(y), t: Date.now() - t0, label: label });
+const centre = (b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
 
-/** Mark a beat: where the cursor is and when, so the renderer can zoom to it. */
-function mark(x, y, label) { clicks.push({ x: Math.round(x), y: Math.round(y), t: Date.now() - t0, label }); }
-
-async function glide(x, y, steps = 30) {
-  await page.mouse.move(x, y, { steps });
+/** Grab point pushed toward the outside of the page: content layers with a
+ *  higher z-index often cover an element's centre out in the gutters. */
+function grabPoint(b, outward) {
+  const c = centre(b);
+  if (!outward) return { x: c.x, y: c.y, dir: 0 };
+  const dir = c.x < W / 2 ? -1 : 1;
+  return { x: c.x + dir * b.width * 0.32, y: c.y, dir: dir };
 }
 
-async function at(sel) {
-  const b = await page.locator(sel).first().boundingBox().catch(() => null);
-  return b && { x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) };
-}
+for (const s of flow.steps) {
+  const label = s.label || (s.do + ' ' + (s.sel || '')).trim();
+  try {
+    if (s.do === 'wait') { await page.waitForTimeout(s.ms ?? 800); continue; }
+    if (s.do === 'key') { await page.keyboard.press(s.key); await page.waitForTimeout(s.ms ?? 400); continue; }
+    if (s.do === 'scrollTo') {
+      await loc(s).scrollIntoViewIfNeeded();
+      await page.waitForTimeout(s.ms ?? 700);
+      continue;
+    }
 
-// A flow that actually shows the page DOING something: a sticker lights up and
-// gets dragged, the terminal field reacts to the cursor, then a nav jump.
-// Grab the sticker OFF-CENTRE, toward the outside of the page: the content
-// column sits above the marginalia layer (z-index) and overlaps the gutter at
-// this width, so a press at the sticker's centre lands on the text instead.
-let dragged = false;
-const stickers = await page.locator('.sticker').all().catch(() => []);
-for (const el of stickers) {
-  const b = await el.boundingBox().catch(() => null);
-  if (!b) continue;
-  const outward = b.x + b.width / 2 < W / 2 ? -1 : 1;      // push away from centre
-  const gx = Math.round(b.x + b.width / 2 + outward * b.width * 0.32);
-  const gy = Math.round(b.y + b.height / 2);
-  const before = await el.evaluate((e) => e.style.transform || '');
+    const b = await box(s);
+    if (!b) { console.log('skip', label); continue; }
 
-  await glide(gx, gy);
-  await page.waitForTimeout(700);
-  mark(gx, gy, 'hover sticker');
-  await page.waitForTimeout(800);
+    if (s.do === 'hover' || s.do === 'move') {
+      const c = grabPoint(b, s.outward);
+      await page.mouse.move(c.x, c.y, { steps: s.steps ?? 30 });
+      await page.waitForTimeout(s.settleMs ?? 650);
+      if (s.beat !== false) mark(c.x, c.y, label);
+      await page.waitForTimeout(s.ms ?? 800);
+      continue;
+    }
 
-  await page.mouse.down();
-  for (let i = 1; i <= 26; i++) {
-    await page.mouse.move(gx + outward * i * -7, gy + i * 3.4);
-    await page.waitForTimeout(13);
+    if (s.do === 'click' || s.do === 'type') {
+      const c = centre(b);
+      await page.mouse.move(c.x, c.y, { steps: s.steps ?? 30 });
+      await page.waitForTimeout(s.settleMs ?? 380);
+      if (s.beat !== false) mark(c.x, c.y, label);
+      await loc(s).click().catch(function () {});
+      if (s.do === 'type') {
+        await page.keyboard.type(s.text, { delay: s.delay ?? 60 });
+      }
+      await page.waitForTimeout(s.ms ?? 1400);
+      continue;
+    }
+
+    if (s.do === 'pulse') {           // press+release in place, no navigation
+      const c = centre(b);
+      await page.mouse.move(c.x, c.y, { steps: s.steps ?? 30 });
+      await page.waitForTimeout(s.settleMs ?? 600);
+      if (s.beat !== false) mark(c.x, c.y, label);
+      await page.mouse.down(); await page.mouse.up();
+      await page.waitForTimeout(s.ms ?? 1400);
+      continue;
+    }
+
+    if (s.do === 'drag') {
+      const g = grabPoint(b, s.outward ?? true);
+      const by = (s.by ?? [-180, 90])[1];
+      const bxAbs = Math.abs((s.by ?? [-180, 90])[0]);
+      const dx = g.dir ? -g.dir * bxAbs : (s.by ?? [-180, 90])[0];
+      const before = await loc(s).evaluate((e) => e.style.transform || '');
+      await page.mouse.move(g.x, g.y, { steps: s.steps ?? 30 });
+      await page.waitForTimeout(s.settleMs ?? 600);
+      if (s.beat !== false) mark(g.x, g.y, label + ' (grab)');
+      await page.mouse.down();
+      const N = s.frames ?? 26;
+      for (let i = 1; i <= N; i++) {
+        await page.mouse.move(g.x + (dx * i) / N, g.y + (by * i) / N);
+        await page.waitForTimeout(13);
+      }
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+      const after = await loc(s).evaluate((e) => e.style.transform || '');
+      if (after === before) console.log('WARNING: drag on ' + s.sel + ' did not move it');
+      else console.log('drag ok: ' + (before || 'none') + ' -> ' + after);
+      if (s.beat !== false) mark(g.x + dx, g.y + by, label);
+      await page.waitForTimeout(s.ms ?? 1200);
+      continue;
+    }
+
+    console.log('unknown step:', s.do);
+  } catch (e) {
+    console.log('step failed (' + label + '):', String(e.message || e).slice(0, 120));
   }
-  await page.mouse.up();
-  await page.waitForTimeout(500);
-
-  const after = await el.evaluate((e) => e.style.transform || '');
-  if (after !== before) {
-    dragged = true;
-    mark(gx + outward * -182, gy + 88, 'drag sticker');
-    console.log('dragged ok', before, '->', after);
-    await page.waitForTimeout(1200);
-    break;
-  }
-  console.log('drag did not take on this sticker, trying next');
-}
-if (!dragged) console.log('WARNING: no sticker drag registered');
-
-const band = await at('.ascii-band');
-if (band) {
-  await page.locator('.ascii-band').first().scrollIntoViewIfNeeded().catch(() => {});
-  await page.waitForTimeout(600);
-  const b2 = await at('.ascii-band');
-  if (b2) {
-    await glide(b2.x, b2.y, 34);
-    await page.waitForTimeout(650);          // glyphs surface under the cursor
-    mark(b2.x, b2.y, 'scan noise');
-    await page.mouse.down(); await page.mouse.up();   // ring pulse
-    await page.waitForTimeout(1500);
-  }
 }
 
-const career = await at('.rail a[href="#career"]');
-if (career) {
-  await glide(career.x, career.y, 30);
-  await page.waitForTimeout(380);
-  mark(career.x, career.y, 'career');
-  await page.locator('.rail a[href="#career"]').first().click().catch(() => {});
-  await page.waitForTimeout(1500);
-}
-
+await page.waitForTimeout(flow.tailMs ?? 1100);
 await cdp.send('Page.stopScreencast');
 await page.waitForTimeout(400);
 
-// Read the true frame size out of the first PNG's IHDR rather than assuming
-// the override took effect.
+// True frame size from the first PNG's IHDR rather than assuming.
 let realW = W, realH = H;
 try {
-  const b = fs.readFileSync(`${OUT}/frames/f00000.png`);
-  realW = b.readUInt32BE(16); realH = b.readUInt32BE(20);
-} catch {}
+  const hb = fs.readFileSync(OUT + '/frames/f00000.png');
+  realW = hb.readUInt32BE(16); realH = hb.readUInt32BE(20);
+} catch (e) {}
 
-// Frame timestamps are CDP monotonic seconds; rebase to ms from capture start.
 const base = frames.length ? frames[0].t : 0;
-const manifest = {
-  // frames are DEVICE pixels; clicks are CSS px, so the renderer scales by dsf
-  // getBoundingClientRect already returns zoomed coordinates, so clicks are
-  // in frame space 1:1 - no extra scaling in the renderer.
-  width: realW, height: realH, layout: [LAYOUT_W, LAYOUT_H], zoom: ZOOM, dsf: 1,
+fs.writeFileSync(OUT + '/manifest.json', JSON.stringify({
+  width: realW, height: realH, layout: [LW, LH], zoom: ZOOM, dsf: 1,
   frames: frames.map((f) => ({ i: f.i, ms: Math.round((f.t - base) * 1000) })),
-  clicks,
-};
-fs.writeFileSync(`${OUT}/manifest.json`, JSON.stringify(manifest, null, 1));
-console.log(`frames=${frames.length} clicks=${clicks.length} size=${realW}x${realH} -> ${OUT}`);
+  clicks: beats,
+}, null, 1));
+
+if (writeErr) console.log('WARNING: some frames failed to write:', String(writeErr.message).slice(0, 100));
+console.log('frames=' + frames.length + ' beats=' + beats.length + ' size=' + realW + 'x' + realH + ' -> ' + OUT);
+await page.close();
+}

@@ -1,161 +1,148 @@
 # demokit
 
-Agent-driven demo videos: drive a browser, record it, and get a customer-ready MP4 that looks
-**edited, not raw** — the recording inset on a blurred backdrop with rounded corners and a drop
-shadow, a synthetic cursor, click ripples, click-focused zoom, and dead air compressed. No
-captions.
+Agent-driven product demo videos. Point it at a URL with a list of steps; get back a
+customer-ready MP4 that looks **edited, not raw** — the recording inset on a blurred backdrop with
+rounded corners and a drop shadow, one synthetic cursor, click ripples, click-focused zoom, and
+dead air compressed. No captions.
 
 ```bash
-# 1. capture: full-resolution PNG frames + an exact click log
-playwriter -s <session> -f src/record.js
+cd .tools && npm i && cd ..                 # vendored ffmpeg/ffprobe (no Homebrew needed)
+playwriter session new --browser headless   # or use your real Chrome session
 
-# 2. render
+DEMOKIT_FLOW=flows/example.json playwriter -s <id> -f src/record.js
 node src/demo.mjs .cache/shot out.mp4
-#   --level 1.4   zoom depth        --inset 0.8   window size in frame
-#   --bias 0.4    pull toward centre --gap 1500    merge clicks closer than this
-#   --keep 1.35   normal-speed pad   --speed 4     idle speed-up
 ```
 
-Two passes:
+## Describing a flow
 
-1. **`src/render.mjs`** — cursor + click ripples in page space, then the inset frame, blurred
-   backdrop, shadow, and click zoom. One ffmpeg graph.
-2. **`src/pace.mjs`** — compress the gaps between zooms.
-
-**playwright-recast is no longer used.** Its cursor overlay is fed from trace coordinates in a
-different space and lands in the wrong place, which put a second, drifting cursor on screen next to
-the real one — and its zoom phase never landed at all. Drawing both ourselves from the recorder's
-own click log means there is exactly one cursor and it is always where the click was.
-
-## Why it's built this way
-
-The pieces already existed; almost none of them fit together out of the box.
-
-| Layer | What we use | Why |
-| --- | --- | --- |
-| Authenticated tab control | **playwriter** (installed) | Extension + CDP into the user's real Chrome. No physical mouse movement, no re-login. |
-| Action trace | `context.tracing` **through the playwriter relay** | Verified working — yields a real `trace.zip` with per-click `point{x,y,timestamp}`. |
-| Capture | **CDP `Page.startScreencast`** (`src/record.js`) | Lossless PNG at true viewport size. The trace screencast is an 800x450 JPEG thumbnail — see below. |
-| Cursor, ripples, frame, zoom | **`src/render.mjs` (ours)** | One cursor, drawn from the recorder's own click coordinates. |
-| Pacing | **`src/pace.mjs` (ours)** | Must run after zoom. |
-
-## Findings worth keeping
-
-**1. `crop` has no `eval` option on `ffmpeg-static` 6.0.**
-Any renderer built on `crop=w=…:h=…:x=…:y=…:eval=frame` dies with
-`Error applying option 'eval' to filter 'crop': Option not found`. Use `zoompan`, whose
-`z`/`x`/`y` expressions are evaluated per frame by design.
-
-**2. ffmpeg's `min()` is binary.**
-`min(a, b, 1)` is not a clamp — it fails at filter-config time with the deeply unhelpful:
-
-```
-Failed to configure output pad on Parsed_zoompan_0
-Failed to inject frame into filter network: Invalid argument
+```json
+{
+  "url": "https://app.example.com/scans",
+  "layout": [1280, 720],
+  "zoom": 2,
+  "steps": [
+    { "do": "wait",   "ms": 900 },
+    { "do": "click",  "sel": "button:has-text('Run scan')", "label": "kick off a scan" },
+    { "do": "wait",   "ms": 4000 },
+    { "do": "click",  "sel": "[data-finding]", "nth": 0, "label": "open the finding" },
+    { "do": "hover",  "sel": ".patch-diff", "label": "the patch" },
+    { "do": "type",   "sel": "input[name=q]", "text": "sql injection", "label": "search" }
+  ]
+}
 ```
 
-Nest instead: `min(min(a, b), 1)`. This cost an hour. **The same 3-argument `min` appears in
-`demo-agent/packages/review-capture/review_capture/postprocess.py` (`_zoom_filters`)** — worth
-checking against whichever ffmpeg that runs on, since it would fail the same way.
+| step | what it does |
+| --- | --- |
+| `wait` | `ms` only |
+| `hover` / `move` | glide the cursor there and dwell |
+| `click` | glide, then click |
+| `pulse` | press and release in place (no navigation) |
+| `drag` | grab and move by `by: [dx, dy]`, and **verify** the element actually moved |
+| `type` | click, then type `text` |
+| `scrollTo` | bring the selector into view (no beat) |
+| `key` | press `key` |
 
-**3. zoompan expressions take plain commas.** Do not escape them as `\,`, and do not both quote
-and escape — that yields a literal backslash inside the expression and an invalid parse.
+Every step with a selector becomes a **beat** — a zoom anchor — unless you set `"beat": false`.
+`nth` picks among matches. `label` shows up in logs.
 
-**4. Zoom without captions is possible.** `autoZoom()` throws without `subtitles()` because zoom
-is stored as `subtitle.zoom`, and the renderer gate is
-`trace.subtitles?.some(s => s.zoom && s.zoom.level > 1.0)`. But `burnSubtitles` and
-`embedSubtitles` both default off, so synthetic cues that are never drawn give you zoom with a
-clean picture.
+**Selectors are preflighted before recording.** If one matches nothing you get a list and no
+capture, rather than a silently empty video ten minutes later.
 
-**5. Speed-up must come *after* zoom.** recast prints click times in pre-speed-up time, so
-enabling `speedUp()` in pass 1 desynchronises every zoom keyframe (in testing, 1 of 3 landed).
-Idle regions carry no zoom envelope, so compressing them after the zoom pass is safe — that's the
-correct order, and why `speedUp()` is currently off.
+## Render options
 
-**6. recast's zoom phase does not land on an external trace.** It logs
-`Zoom: zoompan single-pass (3 keyframes, 25fps, easing: ease-in-out)` and exits 0, but the output
-is unzoomed. Reproduced with both `autoZoom()` and `enrichZoomFromReport()`, with `fps` pinned,
-and with a filter string that is correct when inspected. Cursor overlay and click ripples from the
-same run *do* land, so it is isolated to the zoom phase. Hence pass 2.
+```
+node src/demo.mjs <shotDir> <out.mp4>
+  --level 1.35   zoom depth          --inset 0.84  window size within the frame
+  --bias 0.4     pull toward centre  --gap 1500    merge beats closer than this (ms)
+  --keep 1.35    normal-speed pad    --speed 4     idle speed-up
+  --w 1920 --h 1080                  delivery size
+```
+
+## Sharpness — where it actually goes
+
+This took several wrong turns, so the findings are worth keeping.
+
+**Playwright's trace screencast is a thumbnail.** Frames are **800×450 JPEG**, always. The trace
+metadata reports the *page* size, which is what makes it so easy to miss — you believe you have HD
+frames while upscaling a lossy thumbnail 2.4×. Verified by opening the zip: every `resources/`
+entry is `JPEG (800, 450)`.
+
+**`Page.startScreencast` captures CSS pixels and ignores `deviceScaleFactor`.**
+`Emulation.setDeviceMetricsOverride` with DSF 2 still yields 1280×720 frames — and Playwright
+re-applies its own metrics on navigate, wiping the override anyway. The way to get 2× pixels is a
+2× viewport plus `html{zoom:2}`: the page lays out as if it were `layout` wide but renders at 2×.
+`getBoundingClientRect` returns zoomed coordinates, so beats stay 1:1 with frame pixels.
+
+**Half of "blurry" was really scale.** A 680px content column inside a 1920 viewport is tiny in
+frame, and small type reads as soft however many pixels it has. Hence `layout` — you choose the
+*apparent* size, and `zoom` buys the resolution.
+
+**Composite at capture resolution, downscale once.** Building the composite at 1080p and letting
+`zoompan` upscale 1.35× throws away the 2560 capture at exactly the moment the viewer is looking
+closest. Instead the whole composite is built at 2560×1440, `zoompan` crops from that, and a single
+lanczos downscale to 1080p happens last. Measured +46% edge energy on a text region.
+
+## ffmpeg traps
+
+**`crop` has no `eval` option on `ffmpeg-static` 6.0.** Anything built on `crop=…:eval=frame` dies
+with `Option not found`. `zoompan` evaluates per frame by design — but it cannot zoom below 1.0,
+which is why the downscale is a separate final step.
+
+**`min()` is binary.** `min(a, b, 1)` is not a clamp; it fails at filter-config time with
+`Failed to configure output pad`. Nest it: `min(min(a, b), 1)`. This cost an hour. The same
+three-argument `min` appears in `demo-agent/packages/review-capture/review_capture/postprocess.py`
+(`_zoom_filters`) and would fail the same way.
+
+**zoompan expressions take plain commas.** Don't escape them as `\,`, and never both quote *and*
+escape — that puts a literal backslash inside the expression.
 
 ## Making it look edited
 
-Four things separate this from a raw screen capture, and all four were needed:
+**Inset, not full-bleed.** Filling the frame reads as permanently zoomed in. At ~84% over a blurred
+blow-up of itself, the rest state reads as a window on a desk, so the zoom has somewhere to go.
 
-**The recording is inset, not full-bleed.** Filling the frame makes a demo read as permanently
-zoomed in. At ~80% with a blurred blow-up of itself behind, the rest state reads as a window on a
-desk, so the zoom has somewhere to go.
+**Smoothstep easing.** A linear ramp starts and stops abruptly at both ends — that is exactly what
+makes a zoom feel mechanical. `3e² − 2e³`.
 
-**Smoothstep easing.** The envelope was linear at first, and a linear ramp is exactly what makes a
-zoom feel mechanical — it starts and stops abruptly at both ends. `3e² − 2e³` fixes it.
+**Beats closer than `--gap` collapse into one zoom.** Beats every ~2s with a 2.5s envelope give one
+continuous push and no rest state at all — the single biggest cause of "it looks zoomed in the
+normal state too".
 
-**Clicks closer than `--gap` collapse into one zoom.** Clicking every ~2s with a 2.5s envelope
-gives one continuous push and no rest state at all. This was the single biggest cause of "it looks
-zoomed in the normal as well".
+**Centre bias.** A click on a left-hand rail sits at ~0.14 of frame width; zooming straight at it
+shoves the window off-screen. `--bias` blends each target toward the centre.
 
-**Centre bias.** A click on a left-hand nav rail sits at ~0.14 of frame width; zooming straight at
-it shoves the window off-screen. `--bias` blends each target toward frame centre.
+The crop centre is the envelope-weighted blend of all beats, and the level is `max()` over
+envelopes rather than a sum, so overlapping zooms don't compound.
 
-The crop centre is the **envelope-weighted blend** of all click points, and the level is `max()`
-over envelopes rather than a sum, so overlapping zooms don't compound.
+**Pacing runs last.** Zoom envelopes live in video time, so compressing first desynchronises every
+keyframe. Idle regions carry no envelope, which is why speeding them up afterwards is safe.
 
-## Sharpness: the trace screencast is a thumbnail
+## Not using playwright-recast
 
-**Playwright's trace screencast frames are 800×450 JPEGs**, regardless of viewport. Verified by
-opening the trace zip: every `resources/` entry is `JPEG (800, 450)`. The trace metadata reports
-the *page* size (1920×1080), which is what makes this so easy to miss — you think you have HD
-frames and you are actually upscaling a lossy thumbnail 2.4×.
-
-Two dead ends on the way there: the screencast also ignores `deviceScaleFactor` (a 1280×720
-viewport at DSF 2 still yields 1280×720 metadata), and raising the CSS viewport doesn't help
-either, because the cap is on the stored image.
-
-The fix is to drive the screencast directly: `Page.startScreencast` with `format:'png'` and
-explicit `maxWidth`/`maxHeight`, acking each frame. Per-frame timestamps go into the manifest, and
-the renderer feeds ffmpeg a concat list with real durations so wall-clock timing survives.
-
-**`Page.startScreencast` also captures CSS pixels and ignores `deviceScaleFactor`** —
-`Emulation.setDeviceMetricsOverride` with DSF 2 still yields 1280×720 frames (and Playwright
-re-applies its own metrics on navigate, wiping the override anyway). The way to get 2× pixels is a
-2× viewport plus `html{zoom:2}`: the page lays out as if it were 1280 wide but renders into
-2560×1440. `getBoundingClientRect` returns zoomed coordinates, so clicks stay 1:1 with frame pixels
-and need no rescaling.
-
-That combination also fixes what *looks* like blur but is really scale: a 680px content column in
-a 1920 viewport is tiny in frame, and small type reads as soft no matter how many pixels it has.
-
-## Setup
-
-`ffmpeg` and `ffprobe` are required and are **not** assumed to be on the system — there's no
-Homebrew on this machine. They're vendored:
-
-```bash
-cd .tools && npm i          # ffmpeg-static, ffprobe-static, playwright-recast
-```
-
-`src/zoom.mjs` shells out to whatever `ffmpeg`/`ffprobe` are on `PATH`; symlinks into
-`~/.local/bin` are created by the setup above.
+It was the starting point and is no longer used. Its `cursorOverlay` is fed from trace coordinates
+in a different space, so it drew a *second*, drifting cursor beside the real one — and its zoom
+phase logs success but never lands on an externally-produced trace (reproduced with `autoZoom()`,
+with `enrichZoomFromReport()`, and with `fps` pinned). Drawing the cursor and ripples ourselves from
+the recorder's own beat log means there is exactly one cursor and it is always on target.
 
 ## Layout
 
 ```
-src/record.js    capture: CDP PNG screencast + click log (runs inside playwriter)
-src/render.mjs   cursor, ripples, frame, backdrop, zoom - one ffmpeg graph
-src/pace.mjs     idle speed-up (runs after zoom)
-src/demo.mjs     shot dir -> MP4 orchestrator
-vendor/          shallow clones: playwriter, playwright-recast, openscreen (reference)
-.tools/          vendored ffmpeg + recast
-.cache/          traces and renders (gitignored)
+flows/           flow definitions (JSON)
+src/record.js    capture: CDP PNG screencast + beat log (runs inside playwriter)
+src/render.mjs   cursor, ripples, frame, backdrop, zoom — one ffmpeg graph
+src/pace.mjs     idle speed-up (after zoom)
+src/demo.mjs     shot dir -> MP4
+vendor/          shallow clones kept for reference: playwriter, playwright-recast, openscreen
+.tools/          vendored ffmpeg + ffprobe
+.cache/          frames and renders (gitignored)
 ```
 
-## Not done yet
+## Not done
 
-- Storyboard / rehearse / per-scene retry. The interesting part, and the part that genuinely
-  doesn't exist anywhere — belongs in a skill, not an MCP server, since playwriter already is the
-  MCP and CLI layer.
-- Redaction. Nothing blurs API keys or customer data yet.
-- A synthetic browser chrome bar (traffic lights + URL pill) above the content. A tab screencast
-  has no browser UI, and the reference demos lean on it heavily.
-- Cursor path is reconstructed as an eased travel into each beat rather than logged per-move.
-  Looks right, but a real path log would be truer.
-- The flow in `record.js` is hardcoded for this one site. It should be a data file.
+- **No browser chrome.** A tab screencast has no traffic lights or URL bar; the reference demos
+  lean on it. It would have to be drawn synthetically.
+- Cursor path is reconstructed as an eased travel into each beat rather than logged per move.
+- No redaction — nothing blurs API keys or customer data yet.
+- `chrome.tabCapture` (true 30fps, native res) needs the extension clicked on the tab, so headless
+  runs can't use it.
