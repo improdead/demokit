@@ -7,7 +7,7 @@
  */
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, copyFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, copyFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { render } from './render.mjs';
@@ -22,7 +22,8 @@ if (!shotArg || !outArg) {
   console.error('  --bg     auto | canvas-garden|canvas-dusk|canvas-tide|canvas-ember|canvas-slate');
   console.error('           | dusk ember tide slate noir linen | #rrggbb | <wallpaper.jpg> | blur');
   console.error('  --bgblur 0.004 --bgsat 0.82 --bgdim 0.92   how far a photo backdrop recedes');
-  console.error('  --beats  prune (drop beats where nothing changed) | auto | augment | off');
+  console.error('  --edit   auto (write edit.json) | off      --redirect  regenerate it');
+  console.error('  --pad    0.55  room around a zoom target, as a share of the target');
   console.error('  --deep   1.7   deepest zoom; small targets approach it, big ones stay shallow');
   console.error('  --chrome <url> draw macOS + browser chrome around the page  [--tabs a|b|c]');
   console.error('  --pull   1.28  opening pull-back depth (1 = off), --pullms 1500');
@@ -43,16 +44,26 @@ const man0 = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
 // Default on whenever there is no click log at all - that covers every capture
 // source that isn't the browser recorder, present and future.
 const noClicks = !(man0.clicks || []).length;
-// `--beats prune` drops click beats where the screen did not change. It is not
-// the default: on a hand-authored flow a hover is often a deliberate "look at
-// this", and that reads fine now that the zoom frames the element instead of
-// pushing a fixed amount at a coordinate. Useful on generated flows.
-const beatMode = arg('beats', noClicks ? 'auto' : 'off');
-if (beatMode !== 'off') {
-  const flag = { auto: '--merge', augment: '--augment', prune: '--prune' }[beatMode] || '--merge';
-  const b = await runp('python3', [join(HERE, 'beats.py'), shotDir,
-    '--max', arg('maxbeats', '6'), '--gap', arg('gap', '1500'), flag], { maxBuffer: 1 << 26 });
-  process.stdout.write(b.stdout);
+// The director decides the camera from what actually happened, and writes an
+// editable edit.json. Skipped when one already exists, so hand edits survive a
+// re-render - pass --redirect to regenerate.
+const edlPath = join(shotDir, 'edit.json');
+if (arg('edit', 'auto') !== 'off') {
+  if (!existsSync(edlPath) || rest.includes('--redirect')) {
+    const { direct } = await import('./edit.mjs');
+    const edl = await direct(shotDir, {
+      maxZooms: Number(arg('maxbeats', '6')),
+      minGapMs: Number(arg('gap', '1800')),
+      padFrac: Number(arg('pad', '0.55')),
+    });
+    console.log(`edit: ${edl.zooms.length} zoom(s), each with a reason:`);
+    for (const z of edl.zooms) {
+      console.log(`  ${(z.tMs / 1000).toFixed(1).padStart(6)}s  ${z.rect[2]}x${z.rect[3]}  ${z.reason}`
+        + (z.warn ? `  [!] ${z.warn}` : ''));
+    }
+  } else {
+    console.log(`edit: using existing ${edlPath} (--redirect to regenerate)`);
+  }
 }
 
 // Pass 1: draw the cursor and click pulses onto the frames from the dense
@@ -93,10 +104,16 @@ const r = await render({
   bgSat: Number(arg('bgsat', '0.82')),
   bgDim2: Number(arg('bgdim', '0.92')),
 });
-console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.clicks.length} click(s), backdrop=${r.backdrop}`);
+console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.zooms} zoom(s), backdrop=${r.backdrop}`);
 
-const clicks = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8')).clicks
-  .map((c) => ({ ...c, atMs: c.t }));
+// Pacing protects the stretches around the camera moves. Reading
+// manifest.clicks here protected beats the director had already rejected, and
+// left the real ones exposed - the camera and the cut have to agree.
+const edlNow = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : null;
+const clicks = edlNow && edlNow.chains && edlNow.chains.length
+  ? edlNow.chains.flatMap((c) => [{ atMs: c.startMs }, { atMs: c.endMs }])
+  : JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8')).clicks
+      .map((c) => ({ ...c, atMs: c.t }));
 const p = await pace({
   input: stage, output: outPath, clicks, workDir: ASSETS,
   keep: Number(arg('keep', '1.35')), speed: Number(arg('speed', '4')),

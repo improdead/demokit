@@ -155,16 +155,31 @@ await cdp.send('Page.startScreencast', { format: 'png', maxWidth: W, maxHeight: 
 
 const t0 = Date.now();
 const beats = [];
+const events = [];    // what HAPPENED; the camera is decided from these later
 const path = [];      // EVERY pointer position, so the drawn cursor can follow
 const actions = [];   // presses/releases, for click pulses
 const now = () => Date.now() - t0;
-const mark = (x, y, label, box) => beats.push({
-  x: Math.round(x), y: Math.round(y), t: now(), label: label,
-  // The renderer needs to know how BIG the thing is, not just where it is.
-  // A fixed zoom level pushed at a coordinate frames nothing in particular,
-  // which is what makes the zoom read as arbitrary.
-  w: box ? Math.round(box.width) : 0, h: box ? Math.round(box.height) : 0,
-});
+/**
+ * Recording emits EVENTS. It does not decide where the camera goes.
+ *
+ * This used to call mark() while driving the browser, so every hover became a
+ * zoom anchor - the edit was committed before a single frame existed, by
+ * whoever wrote the flow, blind. src/edit.mjs decides the camera afterwards,
+ * from these events plus the frames, and writes an edit.json you can change
+ * and re-render without recording again.
+ *
+ * `clicks` is still written for older renders, but edit.mjs owns the camera.
+ */
+const mark = (x, y, label, box, kind) => {
+  const e = {
+    kind: kind || 'beat', t: now(), label: label,
+    x: Math.round(x), y: Math.round(y),
+    w: box ? Math.round(box.width) : 0, h: box ? Math.round(box.height) : 0,
+    bx: box ? Math.round(box.x) : 0, by: box ? Math.round(box.y) : 0,
+  };
+  events.push(e);
+  beats.push({ x: e.x, y: e.y, t: e.t, label: label, w: e.w, h: e.h });
+};
 const track = (x, y) => path.push({ x: Math.round(x), y: Math.round(y), t: now() });
 const act = (type, x, y, label) => actions.push({ type: type, x: Math.round(x), y: Math.round(y), t: now(), label: label });
 const centre = (b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
@@ -302,7 +317,7 @@ async function runStep(s, label) {
       await glide(c.x, c.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 650);
       if (await occluded(s, c.x, c.y)) console.log('NOTE: ' + s.sel + ' is covered at that point');
-      if (s.beat !== false) mark(c.x, c.y, label, b);
+      if (s.beat !== false) mark(c.x, c.y, label, b, 'hover');
       await dwell(s.ms ?? 800);
       return;
     }
@@ -317,7 +332,7 @@ async function runStep(s, label) {
       // the result takes a moment to arrive, the push-in peaks on a loading
       // skeleton instead of the thing that loaded. Use it on any step whose
       // payoff is what comes back, not the click itself.
-      if (s.beat !== false && !s.beatAfter) mark(c.x, c.y, label, b);
+      if (s.beat !== false && !s.beatAfter) mark(c.x, c.y, label, b, s.do === 'type' ? 'type' : 'click');
       act('click', c.x, c.y, label);
       await loc(s).click().catch(function () {});
       if (s.do === 'type') {
@@ -328,7 +343,7 @@ async function runStep(s, label) {
         // re-measure: the thing worth framing may have moved or resized
         const nb = await box(s);
         const nc = nb ? centre(nb) : c;
-        mark(nc.x, nc.y, label, nb || b);
+        mark(nc.x, nc.y, label, nb || b, s.do === 'type' ? 'type' : 'click');
       }
       return;
     }
@@ -337,7 +352,7 @@ async function runStep(s, label) {
       const c = centre(b);
       await glide(c.x, c.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 600);
-      if (s.beat !== false) mark(c.x, c.y, label, b);
+      if (s.beat !== false) mark(c.x, c.y, label, b, 'click');
       act('click', c.x, c.y, label);
       await page.mouse.down(); await page.mouse.up();
       await dwell(s.ms ?? 1400);
@@ -353,7 +368,7 @@ async function runStep(s, label) {
       await glide(g.x, g.y, { steps: s.steps ?? 26 });
       await dwell(s.settleMs ?? 600);
       if (await occluded(s, g.x, g.y)) console.log('NOTE: ' + s.sel + ' is covered at the grab point');
-      if (s.beat !== false) mark(g.x, g.y, label + ' (grab)', b);
+      if (s.beat !== false) mark(g.x, g.y, label + ' (grab)', b, 'drag');
       act('down', g.x, g.y, label);
       await page.mouse.down();
       const N = s.frames ?? 26;
@@ -371,7 +386,7 @@ async function runStep(s, label) {
       const after = await loc(s).evaluate((e) => e.style.transform || '');
       if (after === before) console.log('WARNING: drag on ' + s.sel + ' did not move it');
       else console.log('drag ok: ' + (before || 'none') + ' -> ' + after);
-      if (s.beat !== false) mark(g.x + dx, g.y + by, label, b);
+      if (s.beat !== false) mark(g.x + dx, g.y + by, label, b, 'drag');
       await dwell(s.ms ?? 1200);
       return;
     }
@@ -425,6 +440,7 @@ fs.writeFileSync(OUT + '/manifest.json', JSON.stringify({
   endMs: endMs,
   frames: frames.map((f) => ({ i: f.i, ms: Math.round((f.t - base) * 1000) })),
   clicks: shift(beats),
+  events: shift(events),
   path: shift(path),
   actions: shift(actions),
 }, null, 1));

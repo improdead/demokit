@@ -17,7 +17,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -73,12 +73,18 @@ print(json.dumps({
     const { stdout } = await run('python3', ['-c', py], { maxBuffer: 1 << 26 });
     const m = JSON.parse(stdout);
 
+    // Tolerance is RELATIVE, not a flat +5px. The detail span shifts with the
+    // page content - a detail view simply has a different amount of edge energy
+    // than a list - so an absolute threshold reads a content change as a zoom
+    // and reports a resting tail as still zoomed. A real zoom here is ~30%
+    // wider; content drift is a few percent.
     const rest = Math.min(...m.widths.filter((w) => w > 0));
     const peak = Math.max(...m.widths);
-    const restFrames = m.widths.filter((w) => w <= rest + 5).length;
+    const atRest = (w) => w <= rest * 1.08;
+    const restFrames = m.widths.filter(atRest).length;
 
     let tail = 0;
-    for (let i = m.widths.length - 1; i >= 0 && m.widths[i] <= rest + 5; i--) tail += 0.25;
+    for (let i = m.widths.length - 1; i >= 0 && atRest(m.widths[i]); i--) tail += 0.25;
 
     // Dead air is a stall in the MIDDLE. The stretch at the end is the payoff
     // hold, which the skill requires to be 3-5s - counting it as dead air makes
@@ -105,7 +111,12 @@ print(json.dumps({
 
 export async function review({ shotDir, mp4, gap = 1500 }) {
   const man = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
-  const all = man.clicks || [];
+  // The edit decision list is the camera. Reading manifest.clicks measures
+  // what was recorded, not what the video does.
+  const edlPath = join(shotDir, 'edit.json');
+  const edl = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : null;
+  const all = edl ? (edl.chains || []).map((c) => ({ t: c.startMs, label: c.reason }))
+                  : (man.clicks || []);
   const m = await measure(mp4);
 
   // Measure the beats that actually produce a zoom. render.mjs drops any beat
@@ -122,7 +133,7 @@ export async function review({ shotDir, mp4, gap = 1500 }) {
       `${m.duration.toFixed(1)}s (want ${TARGET.minDur}-${TARGET.maxDur})`,
       m.duration < TARGET.minDur ? { speed: -1, keep: +0.5 } : { speed: +1 }],
     ['beats', beats >= TARGET.minBeats && beats <= TARGET.maxBeats,
-      `${beats} zooming${merged ? ` (${merged} merged by --gap)` : ''} (want ${TARGET.minBeats}-${TARGET.maxBeats})`, null],
+      `${beats} camera move(s)${merged ? ` (${merged} merged)` : ''} (want ${TARGET.minBeats}-${TARGET.maxBeats})`, null],
     ['zoom lands', m.zoomRange > 12, `range ${m.zoomRange}px`, { level: +0.15 }],
     ['rest state', m.restFrac >= TARGET.restFrac,
       `${(m.restFrac * 100).toFixed(0)}% unzoomed (want >=${TARGET.restFrac * 100}%)`,

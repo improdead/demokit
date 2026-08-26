@@ -283,7 +283,7 @@ export function buildGraph({
   // downscale ONCE, at the end.
   inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0.4, minGapMs = 1500,
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
-  minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500,
+  minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500, edl = null, panMs = 420,
 }) {
   const parts = [];
   // Cursor and click pulses are already composited into the frames by
@@ -332,71 +332,86 @@ export function buildGraph({
   );
 
   // ---- zoom ----------------------------------------------------------------
-  const kept = [];
-  for (const c of clicks) {
-    if (!kept.length || c.t - kept[kept.length - 1].t >= minGapMs) kept.push(c);
-  }
-  if (!kept.length) {
+  //
+  // Each zoom names a RECTANGLE it must contain. Solving for the crop that
+  // contains it is exact: "frame this element" instead of "push 1.4x toward
+  // this coordinate and hope". The old way could not be accurate even in
+  // principle - depth and target were independent guesses.
+  const chains = (edl && edl.chains && edl.chains.length) ? edl.chains : null;
+  const zooms = (edl && edl.zooms) ? edl.zooms : kept.map((c) => ({
+    tMs: c.t, rect: [c.x - (c.w || 120) / 2, c.y - (c.h || 40) / 2, c.w || 120, c.h || 40],
+    holdMs: hold * 1000, rampMs: ramp * 1000, padFrac: 0.55, reason: c.label,
+  }));
+  if (!zooms.length) {
     parts.push(`[flat]scale=${outW}:${outH}:flags=lanczos[out]`);
     return parts.join(';');
   }
 
   const sx = fgW / srcW, sy = fgH / srcH;
   const tv = `(in/${fps})`;
-  const envs = kept.map((c) => {
-    const half = ramp + hold / 2, at = c.t / 1000;
-    const lin = `clip(min(min((${tv}-${(at - half).toFixed(4)})/${ramp},(${(at + half).toFixed(4)}-${tv})/${ramp}),1),0,1)`;
+
+  /** Solve the crop that CONTAINS a rect. Exact, rather than a depth guess
+   *  aimed at a coordinate - which could not be accurate even in principle. */
+  const solve = (zm) => {
+    const pad = zm.padFrac ?? 0.55;
+    const rx = ox + zm.rect[0] * sx, ry = oy + zm.rect[1] * sy;
+    const rw = zm.rect[2] * sx, rh = zm.rect[3] * sy;
+    const cw = rw * (1 + 2 * pad), chh = rh * (1 + 2 * pad);
+    let z = Math.min(compW / Math.max(1, cw), compH / Math.max(1, chh));
+    z = Math.max(1.02, Math.min(maxLevel, z));
+    return { z, cx: rx + rw / 2, cy: ry + rh / 2 };
+  };
+
+  // Group targets into camera MOVES: one zoom in, pan between targets while
+  // held, one zoom out. Popping out to full frame between every click is what
+  // makes the camera bob.
+  const moves = chains
+    ? chains.map((c) => ({ startMs: c.startMs, endMs: c.endMs, targets: c.targets.map(solve).map((s, i) => ({ ...s, tMs: c.targets[i].tMs })) }))
+    : zooms.map((zm) => {
+        const s = solve(zm);
+        const h = (zm.holdMs ?? hold * 1000);
+        return { startMs: zm.tMs - h / 2, endMs: zm.tMs + h / 2, targets: [{ ...s, tMs: zm.tMs }] };
+      });
+
+  const envs = moves.map((mv) => {
+    const a = (mv.startMs / 1000) - ramp, b = (mv.endMs / 1000) + ramp;
+    const lin = `clip(min(min((${tv}-${a.toFixed(4)})/${ramp},(${b.toFixed(4)}-${tv})/${ramp}),1),0,1)`;
     return `(3*pow(${lin},2)-2*pow(${lin},3))`;
   });
 
-  // Per-beat depth, from the size of the thing being framed.
-  //
-  // A single global --level pushes the same amount at every beat regardless of
-  // what is there: it aims at a coordinate rather than framing an element,
-  // which is what makes the zoom read as arbitrary.
-  //
-  // But "make the element fill N% of the frame" is also wrong, and worse: a
-  // 92px badge then demands 5x, every small target pins to the ceiling, and
-  // they all look identical again. It also upscales past the capture - at 1.7x
-  // the crop is already 1506px being stretched to 1920.
-  //
-  // So: map element size onto a NARROW band, log-spaced. Big things get a
-  // gentle push, small things a firm one, and the variety between beats is what
-  // makes the camera look like it is reading the page.
-  const W_MIN = 80, W_MAX = 2000;
-  const levelFor = (c) => {
-    const w = (c.w || 0) * sx, h = (c.h || 0) * sy;
-    const span = Math.max(w, h * (compW / compH));
-    if (!span) return level;                         // no box recorded: fall back
-    const t = Math.log(Math.max(W_MIN, Math.min(W_MAX, span)) / W_MIN) / Math.log(W_MAX / W_MIN);
-    return maxLevel - (maxLevel - minLevel) * t;
-  };
-  const levels = kept.map(levelFor);
+  // A move holds ONE depth - the shallowest its targets need, so every target
+  // fits inside the crop as the camera pans between them.
+  const levels = moves.map((mv) => Math.min(...mv.targets.map((t) => t.z)));
 
-  const envMax = envs.reduce((a, e) => (a ? `max(${a},${e})` : e), '');
-  const sum = (openPull > 1.001 && openMs > 0
-    ? envs.concat([`(3*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),2)-2*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),3))`])
-    : envs).map((e) => `(${e})`).join('+');
-  const bias = (v) => (v * (1 - centerBias) + 0.5 * centerBias).toFixed(5);
+  /** Piecewise eased pan between the targets of one move. */
+  const panExpr = (mv, key) => {
+    const ts = mv.targets;
+    if (ts.length === 1) return (ts[0][key] / (key === 'cx' ? compW : compH)).toFixed(5);
+    const norm = (v) => (v / (key === 'cx' ? compW : compH)).toFixed(5);
+    let e = norm(ts.at(-1)[key]);
+    for (let i = ts.length - 1; i >= 1; i--) {
+      const t0 = (ts[i].tMs / 1000) - panMs / 1000, t1 = ts[i].tMs / 1000;
+      const p = `clip((${tv}-${t0.toFixed(4)})/${(panMs / 1000).toFixed(4)},0,1)`;
+      const sm = `(3*pow(${p},2)-2*pow(${p},3))`;
+      const from = norm(ts[i - 1][key]), to = norm(ts[i][key]);
+      e = `if(lt(${tv},${t0.toFixed(4)}), ${from}, if(lt(${tv},${t1.toFixed(4)}), (${from}+((${to})-(${from}))*${sm}), ${e}))`;
+    }
+    return e;
+  };
+
+  const terms = moves.map((mv, i) => `(${(levels[i] - 1).toFixed(4)})*(${envs[i]})`);
   const openEnv = (openPull > 1.001 && openMs > 0)
     ? `(3*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),2)-2*pow(clip(1-${tv}/${(openMs / 1000).toFixed(3)},0,1),3))`
     : null;
-  const wxs = kept.map((c, i) => `(${envs[i]})*${bias((ox + c.x * sx) / compW)}`);
-  const wys = kept.map((c, i) => `(${envs[i]})*${bias((oy + c.y * sy) / compH)}`);
+  if (openEnv) terms.push(`(${(openPull - 1).toFixed(4)})*(${openEnv})`);
+
+  const allEnvs = openEnv ? envs.concat([openEnv]) : envs;
+  const sum = allEnvs.map((e) => `(${e})`).join('+');
+  const wxs = moves.map((mv, i) => `(${envs[i]})*(${panExpr(mv, 'cx')})`);
+  const wys = moves.map((mv, i) => `(${envs[i]})*(${panExpr(mv, 'cy')})`);
   if (openEnv) { wxs.push(`(${openEnv})*0.5`); wys.push(`(${openEnv})*0.5`); }
   const wx = wxs.join('+');
   const wy = wys.join('+');
-  // Opening pull-back: start pushed in on the centre and ease out to the full
-  // scene. It gives the first second somewhere to go, which is what stops a
-  // demo opening on a dead static frame - and it reveals the ground the window
-  // is sitting on, which is the whole reason for having a nice one.
-  const terms = kept.map((c, i) => `(${(levels[i] - 1).toFixed(4)})*(${envs[i]})`);
-  if (openPull > 1.001 && openMs > 0) {
-    const dur = (openMs / 1000).toFixed(3);
-    const p = `clip(1-${tv}/${dur},0,1)`;
-    terms.push(`(${(openPull - 1).toFixed(4)})*(3*pow(${p},2)-2*pow(${p},3))`);
-  }
-  // max over per-beat depth * envelope, so overlapping zooms don't compound.
   const z = `(1+${terms.reduce((a, e) => (a ? `max(${a},${e})` : e), '')})`;
 
   // zoompan can't zoom below 1.0, so it runs at the composite size and the
@@ -469,9 +484,13 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const lp = join(assetDir, 'frames.txt');
   writeFileSync(lp, list.join('\n'));
 
+  // The edit decision list, when there is one, is the camera. It is a plain
+  // file: change it and re-render, no recording involved.
+  const edlPath = join(shotDir, 'edit.json');
+  const edl = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : null;
   const graph = buildGraph({
     srcW, srcH, outW, outH, fps, clicks,
-    pad, ...opts, backdrop,
+    pad, ...opts, backdrop, edl,
   });
   const gp = join(assetDir, 'graph.txt');
   writeFileSync(gp, graph);
@@ -486,7 +505,9 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
     '-x264-params', 'aq-mode=3:psy-rd=0.4:deblock=-1,-1',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', output];
   await run('ffmpeg', args, { maxBuffer: 1 << 26 });
-  return { output, srcW, srcH, outW, outH, frames: man.frames.length, clicks, backdrop: bgSpec, graphLength: graph.length };
+  return { output, srcW, srcH, outW, outH, frames: man.frames.length, clicks,
+    backdrop: bgSpec, zooms: edl ? edl.zooms.length : clicks.length,
+    moves: edl && edl.chains ? edl.chains.length : null, graphLength: graph.length };
 }
 
 export async function makeAssets({ dir, w, h, radius = 18, pad = 40, shadowAlpha = 110, shadowBlur = 22, shadowDy = 14 }) {
