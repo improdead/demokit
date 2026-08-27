@@ -74,6 +74,7 @@ if (arg('edit', 'auto') !== 'off') {
       minGapMs: Number(arg('gap', '1800')),
       padFrac: Number(arg('pad', '0.55')),
     });
+    for (const w of edl.warnings || []) console.log(`edit: ! ${w}`);
     console.log(`edit: ${edl.zooms.length} zoom(s), each with a reason:`);
     for (const z of edl.zooms) {
       console.log(`  ${(z.tMs / 1000).toFixed(1).padStart(6)}s  ${z.rect[2]}x${z.rect[3]}  ${z.reason}`

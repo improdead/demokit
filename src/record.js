@@ -116,7 +116,11 @@ if (flow.hide || flow.redact) {
 await page.waitForTimeout(500);
 
 const loc = (s) => (s.nth == null ? page.locator(s.sel).first() : page.locator(s.sel).nth(s.nth));
-const box = async (s) => await loc(s).boundingBox().catch(() => null);
+// boundingBox() waits out Playwright's DEFAULT 30s timeout when the selector
+// matches nothing. Two of those in one take is a minute of a static screen that
+// pacing then has to compress, with nothing in the log to explain it - a step
+// that did nothing cost 62s of footage before this was capped.
+const box = async (s, ms) => await loc(s).boundingBox({ timeout: s.findMs ?? ms ?? 2500 }).catch(() => null);
 
 // ---- preflight: fail loudly BEFORE burning a capture -----------------------
 // Steps marked "later": true are expected to be missing now (a drawer, a modal,
@@ -310,7 +314,11 @@ async function runStep(s, label) {
     }
 
     const b = await box(s);
-    if (!b) { console.log('skip', label); return; }
+    if (!b) {
+      // Loud: a skipped step is a hole in the demo, not a detail.
+      console.log('STEP SKIPPED (' + label + '): ' + s.sel + ' matched nothing at this point');
+      return;
+    }
 
     if (s.do === 'hover' || s.do === 'move') {
       const c = grabPoint(b, s.outward);
@@ -334,9 +342,22 @@ async function runStep(s, label) {
       // payoff is what comes back, not the click itself.
       if (s.beat !== false && !s.beatAfter) mark(c.x, c.y, label, b, s.do === 'type' ? 'type' : 'click');
       act('click', c.x, c.y, label);
-      await loc(s).click().catch(function () {});
+      // A swallowed click is the worst failure this tool has: the step does
+      // nothing, Playwright waits out its full timeout, and the take ends up
+      // with 30 seconds of a static screen that pacing then has to compress -
+      // all with no message anywhere. Say it, and say how long it cost.
+      const t0c = Date.now();
+      await loc(s).click({ timeout: s.timeout ?? 8000 }).catch(function (e) {
+        console.log('CLICK FAILED (' + label + ') after ' + (Date.now() - t0c) + 'ms: '
+          + String(e.message || e).split('\n')[0].slice(0, 110));
+      });
       if (s.do === 'type') {
-        await page.keyboard.type(s.text, { delay: s.delay ?? 60 });
+        // 60ms/char types a search term in half a second, which reads as a
+        // paste, not as someone typing - and then the flow moved straight on
+        // before the results had landed. Slower, with a settle afterwards so
+        // the result is actually on screen long enough to be read.
+        await page.keyboard.type(s.text, { delay: s.delay ?? 135 });
+        await dwell(s.settleAfterMs ?? 900);
       }
       await dwell(s.ms ?? 1400);
       if (s.beat !== false && s.beatAfter) {

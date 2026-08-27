@@ -68,7 +68,18 @@ def at(ms):
     return a["x"] + (b["x"] - a["x"]) * f, a["y"] + (b["y"] - a["y"]) * f
 
 
-def pressed_at(ms):
+CLICK_PRESS_MS = 150      # how long the pointer reads as held on a click
+
+
+def press_amount(ms):
+    """0 = up, 1 = fully pressed.
+
+    A drag has explicit down/up so the pointer stays held between them. A click
+    was recorded as a single instant, so the pointer never visibly pressed at
+    all - the ripple fired but the cursor itself did not react, which is why
+    clicks read as the pointer floating over things rather than hitting them.
+    A click now presses for CLICK_PRESS_MS and eases back.
+    """
     down = None
     for a in ACTIONS:
         if a["t"] > ms:
@@ -77,7 +88,17 @@ def pressed_at(ms):
             down = a["t"]
         elif a["type"] == "up":
             down = None
-    return down is not None
+    if down is not None:
+        return 1.0
+    for a in ACTIONS:
+        if a["type"] != "click":
+            continue
+        dt = ms - a["t"]
+        if 0 <= dt <= CLICK_PRESS_MS:
+            # quick down, slower release
+            p = dt / CLICK_PRESS_MS
+            return 1.0 - (p * p) if p > 0.35 else 1.0
+    return 0.0
 
 
 def one(job):
@@ -108,9 +129,13 @@ def one(job):
 
     p = at(ms)
     if p is not None:
-        spr = PRESSED if pressed_at(ms) else CURSOR
-        hx = HX * (0.88 if spr is PRESSED else 1)
-        hy = HY * (0.88 if spr is PRESSED else 1)
+        amt = press_amount(ms)
+        if amt > 0.02:
+            k = 1.0 - 0.12 * amt          # shrink toward the press
+            spr = CURSOR.resize((max(1, int(CURSOR.width * k)), max(1, int(CURSOR.height * k))), Image.LANCZOS)
+            hx, hy = HX * k, HY * k
+        else:
+            spr, hx, hy = CURSOR, HX, HY
         im.alpha_composite(spr, (int(round(p[0] - hx)), int(round(p[1] - hy))))
 
     im.convert("RGB").save(dst, compress_level=1)

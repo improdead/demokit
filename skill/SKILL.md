@@ -94,6 +94,11 @@ S3  PR opened, finding drops out of the queue             <- click "Open pull re
   single most common reason a demo feels like nothing happened.
 - **Deletion test.** For each beat, delete it: is the claim still proved? If yes, leave it deleted.
   Stop when removing the next one breaks the proof.
+- **Never hold a zoom over a dead screen.** The camera may stay pushed in while
+  something is happening; the moment the screen stops changing it should come
+  out. A 4.8s held pan with a 2.2s static gap in the middle is the viewer
+  waiting, pushed in, for nothing. The director splits a chain rather than hold
+  across dead time, and ends a hold shortly after the last thing that moved.
 - **Mark exactly one state the payoff.** Open on the state just before it; hold longest on it.
 - **Prefer a case with a real slow operation** — a visible working state and then a result is far
   more convincing than a cut, and `--speed` compresses the wait afterwards.
@@ -225,6 +230,45 @@ never compress the payoff hold.
 demokit renders **no captions, no audio, no text cards**. Every load-bearing fact must be legible in
 the UI itself. If the claim only lands with a sentence of narration, this tool cannot make that
 demo, and saying so is the right answer.
+
+## 6b. A demo is actions, not hovers
+
+The single biggest way a flow goes wrong is filling up with `hover` steps. A
+hover is cheap to write and it looks like a beat in the flow file, but on screen
+**nothing happens** — and a camera move onto a screen where nothing is happening
+is exactly what makes a demo feel arbitrary.
+
+A take that was four hovers, one click and one keystroke over 52 seconds read as
+a tour, not a demo. `bin/demokit edit` refuses to be quiet about it now:
+
+```
+! 4 hovers vs 2 actions - this is a tour, not a demo.
+  Replace hovers with clicks that change something.
+```
+
+**Rules:**
+
+- **Actions must outnumber hovers.** Aim for at least two clicks/keystrokes for
+  every hover. If a step cannot change the screen, it is narration you cannot
+  hear — cut it.
+- **A hover earns its place only when the thing it points at is the payoff** —
+  a number, a diff, a badge that the click just produced. One or two per demo.
+- **Never two hovers in a row.** That is thirty seconds of a cursor drifting.
+- If the product genuinely has nothing to click on the page you chose, that is
+  the page being wrong, not the flow.
+
+## 6c. Typing
+
+`type` used to run at 60ms/char, which puts a search term on screen in half a
+second — that reads as a paste, not as a person. Worse, the flow moved on before
+the results had landed, so the thing the typing was *for* was never held.
+
+- Default is **135ms/char** now, and every `type` step settles for **900ms**
+  afterwards before its own `ms` dwell. Override with `delay` / `settleAfterMs`.
+- **Type short strings.** `corvel` is six characters and takes ~0.8s. A 30
+  character query takes four seconds of watching a text field fill up.
+- **The beat belongs after the result, not the keystroke** — `"beatAfter": true`
+  on every `type` step.
 
 ## 7. Write the flow
 

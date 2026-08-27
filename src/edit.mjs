@@ -47,6 +47,8 @@ const DEFAULTS = {
   preLeadMs: 350,        // start the move slightly before the target
   panMs: 420,            // ease between targets inside a chain
   hoverIntent: true,     // an authored, labelled hover counts as a reason
+  minHoldMs: 900,        // never shorter than this once the camera has moved
+  settleMs: 700,         // linger this long after the last thing that moved
   maxTargets: 5,
   blankFrac: 0.45,       // below this share of the usual on-screen content = blank
 };
@@ -269,22 +271,65 @@ export async function direct(shotDir, opts = {}) {
   // is what makes the camera bob - it pops out to full frame and back for every
   // click, which reads as twitchy rather than deliberate. (The idea is
   // pagecast's; it calls them zoom chains.)
+  /** Did anything move on screen between these two instants? */
+  const activeBetween = (a, b) =>
+    track.some((s) => s.t > a + 250 && s.t < b - 250 && s.frac >= o.changeFrac);
+
   const chains = [];
   for (const z of kept) {
     const last = chains.at(-1);
-    if (last && z.tMs - last.targets.at(-1).tMs <= o.chainGapMs) last.targets.push(z);
+    const prev = last && last.targets.at(-1);
+    // Chain only across time where something is HAPPENING. Holding a zoom over
+    // a static gap is the worst kind of camera move: it is pushed in, nothing
+    // is going on, and the viewer waits. Two targets 2.2s apart with a dead
+    // screen between them are two moves, not one pan.
+    const chainable = prev
+      && z.tMs - prev.tMs <= o.chainGapMs
+      && (z.tMs - prev.tMs <= o.panMs * 2.5 || activeBetween(prev.tMs, z.tMs));
+    if (chainable) last.targets.push(z);
     else chains.push({ targets: [z] });
   }
   for (const c of chains) {
     c.startMs = Math.max(0, c.targets[0].tMs - o.preLeadMs);
-    c.endMs = c.targets.at(-1).tMs + o.holdMs;
+    // End the hold shortly after the last thing that actually happened, not a
+    // fixed time later - otherwise the camera sits pushed in on a still frame.
+    const lastT = c.targets.at(-1).tMs;
+    const lastActive = track.filter((s) => s.t >= lastT - 300 && s.t <= lastT + o.holdMs && s.frac >= o.changeFrac)
+      .reduce((m, s) => Math.max(m, s.t), lastT);
+    c.endMs = Math.min(lastT + o.holdMs, Math.max(lastActive + o.settleMs, lastT + o.minHoldMs));
     c.reason = c.targets.length === 1
       ? c.targets[0].reason
       : `${c.targets.length} targets: ` + c.targets.map((t) => t.reason.split(':')[1]?.trim() || t.kind).join(' -> ');
   }
 
+  // A demo is things happening. Counting hovers as beats let a flow of four
+  // hovers, one click and one keystroke pass as a demo - the camera moved five
+  // times and the product did almost nothing. Say so loudly; it is a flow
+  // problem and no render flag fixes it.
+  const nAct = events.filter((e) => ['click', 'type', 'drag'].includes(e.kind)).length;
+  const hovers = events.filter((e) => e.kind === 'hover').length;
+  const warnings = [];
+  if (nAct && hovers > nAct * 1.5) {
+    warnings.push(`${hovers} hovers vs ${nAct} actions - this is a tour, not a demo. `
+      + 'Replace hovers with clicks that change something.');
+  }
+  // A long stretch with nothing happening is a hole, and it is a FLOW problem -
+  // pacing can compress it but cannot make it interesting.
+  const times = events.map((e) => e.t).sort((a, b) => a - b);
+  for (let i = 1; i < times.length; i++) {
+    if (times[i] - times[i - 1] > 20000) {
+      warnings.push(`${((times[i] - times[i - 1]) / 1000).toFixed(0)}s with nothing happening `
+        + `between ${(times[i - 1] / 1000).toFixed(0)}s and ${(times[i] / 1000).toFixed(0)}s `
+        + '- a step probably did nothing. Check the log for STEP SKIPPED.');
+    }
+  }
+  if (!nAct) {
+    warnings.push('no clicks, keystrokes or drags at all - nothing happens in this take.');
+  }
+
   const edl = {
     source: shotDir,
+    warnings,
     durationMs: endMs,
     frame: { w: man.width, h: man.height },
     chains,
@@ -304,6 +349,7 @@ function explain(edl) {
   const ch = edl.chains || [];
   console.log(`edit: ${ch.length} camera move(s) covering ${edl.zooms.length} target(s) over ${(edl.durationMs / 1000).toFixed(1)}s`);
   if (edl.shallow) console.log(`  (${edl.shallow} target(s) dropped - too big to be worth magnifying)`);
+  for (const w of edl.warnings || []) console.log(`  ! ${w}`);
   for (const c of ch) {
     console.log(`  ${(c.startMs / 1000).toFixed(1)}s-${(c.endMs / 1000).toFixed(1)}s  ${c.targets.length > 1 ? 'pan' : 'hold'}`);
     for (const z of c.targets) {

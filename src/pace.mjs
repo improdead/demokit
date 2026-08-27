@@ -53,13 +53,19 @@ export function planSegments({ clicks, duration, keep = 1.35, speed = 4, minIdle
   for (const [a, b] of merged) {
     if (a - cursor > 0.01) {
       // only bother speeding a gap that is actually dead air
-      segs.push({ start: cursor, end: a, speed: a - cursor >= minIdle ? speed : 1 });
+      // Compress harder the longer the dead stretch. A 60s static gap at 4x is
+      // still 15s of nothing; the rate has to scale with the problem.
+      const gap = a - cursor;
+      const rate = gap < minIdle ? 1 : Math.min(24, speed * Math.max(1, gap / 8));
+      segs.push({ start: cursor, end: a, speed: rate });
     }
     segs.push({ start: a, end: b, speed: 1 });
     cursor = b;
   }
   if (duration - cursor > 0.01) {
-    segs.push({ start: cursor, end: duration, speed: duration - cursor >= minIdle ? speed : 1 });
+    const gap = duration - cursor;
+    segs.push({ start: cursor, end: duration,
+      speed: gap < minIdle ? 1 : Math.min(24, speed * Math.max(1, gap / 8)) });
   }
   return segs;
 }
