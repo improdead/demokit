@@ -41,7 +41,9 @@ const DEFAULTS = {
   maxZooms: 2,          // the version that read well had NO zoom; two is generous
   sceneFrac: 0.45,       // more of the frame than this changed = a scene change
   sceneArea: 0.45,       // a target covering more of the frame than this is not one
-  chainGapMs: 8000,      // targets closer than this share one camera move
+  chainGapMs: 4000,      // targets closer than this share one camera move.
+                         // 8s let two beats 6.6s apart become a 7.8s held pan -
+                         // long enough that the camera reads as stuck, not moving.
   minUseful: 1.25,       // below this a "zoom" is drift; stay still instead
   usefulFill: 0.55,      // target should span this much of the frame when framed
   preLeadMs: 350,        // start the move slightly before the target

@@ -35,8 +35,13 @@ try {
 }
 
 const run = promisify(execFile);
-const [, , flowPath, name, bin, winXs, winYs] = process.argv;
+const [, , flowPath, name, bin, winXs, winYs, dsfs, mode] = process.argv;
+const PREPARE = mode === 'prepare';
 const winX = Number(winXs || 0), winY = Number(winYs || 0);
+// X11 works in DEVICE pixels; CDP bounding boxes are in CSS pixels. With a
+// device scale factor those differ by exactly dsf, and forgetting it puts the
+// pointer at half the distance from the origin that it should be.
+const DSF = Number(dsfs || 1);
 const flow = JSON.parse(readFileSync(flowPath, 'utf8'));
 
 const xdo = (args) => run(bin, ['exec', '-e', 'DISPLAY=:99', name, 'xdotool', ...args]).catch(() => {});
@@ -68,15 +73,54 @@ if (cookieFile && existsSync(cookieFile)) {
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(flow.settleMs ?? 3000);
 
+if (PREPARE) {
+  // 1. Do not start recording on a sign-in page. Cookies are injected before the
+  //    first navigation, but the app still renders its auth screen for a beat
+  //    while it validates them - and those seconds became the opening shot.
+  const authed = async () => page.evaluate(() =>
+    !/sign in|welcome back|log in|continue with/i.test(document.body.innerText.slice(0, 600)));
+  let ok = false;
+  for (let i = 0; i < 20 && !ok; i++) {
+    ok = await authed().catch(() => false);
+    if (!ok) await page.waitForTimeout(700);
+  }
+  if (!ok) {
+    console.log('BOX PREFLIGHT FAILED: still on a sign-in page after 14s.');
+    console.log('  The injected cookies did not authenticate. Re-export them from a signed-in browser.');
+    process.exit(3);
+  }
+  console.log('boxflow: authenticated');
+
+  // 2. Preflight the selectors HERE, where the browser path already does it.
+  //    A step that silently matches nothing produced a video from three-fifths
+  //    of a flow, and the director then chained unrelated moments into one pan.
+  const missing = [];
+  for (const st of flow.steps) {
+    if (!st.sel || st.later) continue;
+    const l = st.nth == null ? page.locator(st.sel).first() : page.locator(st.sel).nth(st.nth);
+    const b = await l.boundingBox({ timeout: st.findMs ?? 2500 }).catch(() => null);
+    if (!b) missing.push(`${st.do} ${st.sel}`);
+  }
+  if (missing.length && !flow.allowMissing) {
+    console.log('BOX PREFLIGHT FAILED - these matched nothing at this viewport:');
+    for (const m of missing) console.log('  - ' + m);
+    console.log('  A different viewport lays the page out differently; re-probe and fix the flow.');
+    process.exit(4);
+  }
+  console.log(`boxflow: ${flow.steps.filter((x) => x.sel && !x.later).length} selector(s) preflighted`);
+  await browser.close().catch(() => {});
+  process.exit(0);
+}
+
 // Page (0,0) in DISPLAY coordinates = where the window is + how tall its chrome
 // is. Both terms matter: drop the window origin and every click lands offset by
 // wherever the window happens to sit; drop the chrome height and the visible
 // pointer sits a tab-strip above whatever it clicks.
-const chromeY = await page.evaluate(() => window.outerHeight - window.innerHeight);
-const chromeX = await page.evaluate(() => Math.max(0, (window.outerWidth - window.innerWidth) / 2));
+const chromeY = await page.evaluate(() => (window.outerHeight - window.innerHeight)) * DSF;
+const chromeX = await page.evaluate(() => Math.max(0, (window.outerWidth - window.innerWidth) / 2)) * DSF;
 console.log(`boxflow: window at ${winX},${winY} + chrome offset ${chromeX},${chromeY}`);
 
-const toScreen = (x, y) => [Math.round(winX + chromeX + x), Math.round(winY + chromeY + y)];
+const toScreen = (x, y) => [Math.round(winX + chromeX + x * DSF), Math.round(winY + chromeY + y * DSF)];
 const smooth = (p) => p * p * p * (10 - 15 * p + 6 * p * p);
 
 // The container path produced no event stream, so the director had nothing to
@@ -118,8 +162,8 @@ for (const s of flow.steps) {
       kind: s.do === 'hover' || s.do === 'move' ? 'hover' : (s.do === 'type' ? 'type' : 'click'),
       t: now(), label,
       x: Math.round(sx - winX), y: Math.round(sy - winY),
-      w: Math.round(b.width), h: Math.round(b.height),
-      bx: Math.round(b.x + chromeX), by: Math.round(b.y + chromeY),
+      w: Math.round(b.width * DSF), h: Math.round(b.height * DSF),
+      bx: Math.round(b.x * DSF + chromeX), by: Math.round(b.y * DSF + chromeY),
     };
     if (s.do === 'hover' || s.do === 'move') {
       if (s.beat !== false) events.push(ev);

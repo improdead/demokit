@@ -72,7 +72,7 @@ export async function buildImage(bin, contextDir) {
 const dexec = (bin, name, args, opts = {}) =>
   run(bin, ['exec', '-e', `DISPLAY=${DISPLAY}`, name, ...args], { maxBuffer: 1 << 26, ...opts });
 
-export async function capture({ shotDir, flowPath, size = '2560x1440', fps = 30, keep = false }) {
+export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 25, keep = false, dsf = 2 }) {
   const pre = await preflight();
   if (!pre.ok) {
     for (const p of pre.problems) console.error('screenbox: ' + p);
@@ -114,6 +114,7 @@ export async function capture({ shotDir, flowPath, size = '2560x1440', fps = 30,
        chromium --no-sandbox --disable-gpu --disable-dev-shm-usage --test-type \
          --no-first-run --no-default-browser-check --disable-features=TranslateUI \
          --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 \
+         --force-device-scale-factor=${dsf} \
          --remote-allow-origins='*' ${url} >/tmp/chromium.log 2>&1 &
        sleep 7`]);
 
@@ -181,7 +182,21 @@ while True:
       w: Math.min(Number(gv2.WIDTH) || wW, W - gx) & ~1,
       h: Math.min(Number(gv2.HEIGHT) || wH, H - gy) & ~1,
     };
-    console.log(`screenbox: window ${geom.w}x${geom.h} at ${geom.x},${geom.y} on a ${W}x${H} desktop`);
+    console.log(`screenbox: window ${geom.w}x${geom.h} device px at ${geom.x},${geom.y} `
+      + `on a ${W}x${H} desktop (dsf ${dsf} -> ~${Math.round(geom.w / dsf)} CSS px of layout)`);
+
+    // Prepare BEFORE the camera rolls: wait out the auth screen and preflight
+    // every selector. Recording first meant the opening shot was a sign-in page
+    // and a half-failed flow still produced a video.
+    const prep = await new Promise((res) => {
+      const p = spawn('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
+        String(geom.x), String(geom.y), String(dsf), 'prepare'], { stdio: 'inherit',
+        env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '',
+               DEMOKIT_COOKIES: process.env.DEMOKIT_COOKIES || '' } });
+      p.on('exit', (c) => res(c ?? 1));
+      p.on('error', () => res(1));
+    });
+    if (prep !== 0) throw new Error('box preflight failed - not recording');
 
     // `docker exec ... "cmd &"` does not survive: the backgrounded process dies
     // with the exec session. -d detaches it properly.
@@ -205,7 +220,7 @@ while True:
     // was being swallowed. spawn actually inherits.
     await new Promise((res) => {
       const p = spawn('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
-        String(geom.x), String(geom.y)], { stdio: 'inherit',
+        String(geom.x), String(geom.y), String(dsf)], { stdio: 'inherit',
         env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '',
                DEMOKIT_COOKIES: process.env.DEMOKIT_COOKIES || '',
                DEMOKIT_EVENTS: join(shotDir, 'boxevents.json') } });
@@ -254,8 +269,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(2);
   }
   const r = await capture({
-    shotDir, flowPath: arg('flow'), size: arg('size', '2560x1440'),
-    fps: Number(arg('fps', '30')), keep: rest.includes('--keep'),
+    shotDir, flowPath: arg('flow'), size: arg('size', '4288x2560'),
+    fps: Number(arg('fps', '25')), dsf: Number(arg('dsf', '2')), keep: rest.includes('--keep'),
   });
   console.log(`screenbox: ${r.frames} frames @ ${r.width}x${r.height} -> ${shotDir}`);
 }
