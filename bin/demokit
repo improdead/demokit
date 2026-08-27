@@ -143,6 +143,10 @@ if [ "${1:-}" = "box" ]; then
       *) RENDARGS+=("$1"); shift;;
     esac
   done
+  # OrbStack installs its CLI outside the default PATH, and boxflow needs a
+  # playwright that ESM import cannot find by name.
+  export PATH="$HOME/.orbstack/bin:$PATH"
+  [ -n "${DEMOKIT_PW:-}" ] || export DEMOKIT_PW="$(find "$HOME/.npm/_npx" -maxdepth 4 -name playwright-core -type d 2>/dev/null | head -1)"
   node src/screenbox.mjs "$SHOT" --flow "$FLOW" "${BOXARGS[@]+"${BOXARGS[@]}"}" || exit 1
   exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
 fi

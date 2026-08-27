@@ -15,29 +15,55 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFileSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { createRequire } from 'node:module';
+
+// ESM `import` ignores NODE_PATH, so a playwright that lives in the npx cache
+// (which is where playwriter's copy is) cannot be imported by name. createRequire
+// against an explicit path can.
+const req = createRequire(import.meta.url);
+let chromium;
+try {
+  ({ chromium } = req('playwright-core'));
+} catch {
+  const p = process.env.DEMOKIT_PW;
+  if (!p) {
+    console.error('boxflow: no playwright-core. Set DEMOKIT_PW to its directory, '
+      + 'or run: (cd .tools && npm i playwright-core)');
+    process.exit(2);
+  }
+  ({ chromium } = req(p));
+}
 
 const run = promisify(execFile);
-const [, , flowPath, name, bin] = process.argv;
+const [, , flowPath, name, bin, winXs, winYs] = process.argv;
+const winX = Number(winXs || 0), winY = Number(winYs || 0);
 const flow = JSON.parse(readFileSync(flowPath, 'utf8'));
 
 const xdo = (args) => run(bin, ['exec', '-e', 'DISPLAY=:99', name, 'xdotool', ...args]).catch(() => {});
 
-const browser = await chromium.connectOverCDP('http://localhost:9222');
+// The relay exposes CDP, but the browser still advertises its websocket as
+// 127.0.0.1:9222 - which from out here is this machine, not the container. Fetch
+// the endpoint and rewrite the host before connecting.
+const ver = await (await fetch('http://localhost:9223/json/version')).json();
+const ws = String(ver.webSocketDebuggerUrl).replace(/\/\/[^/]+\//, '//localhost:9223/');
+const browser = await chromium.connectOverCDP(ws);
 const ctx = browser.contexts()[0];
 const page = ctx.pages()[0] || await ctx.newPage();
 await page.waitForLoadState('domcontentloaded').catch(() => {});
 await page.waitForTimeout(flow.settleMs ?? 3000);
 
-// Page (0,0) in screen coordinates: the browser chrome's height.
+// Page (0,0) in DISPLAY coordinates = where the window is + how tall its chrome
+// is. Both terms matter: drop the window origin and every click lands offset by
+// wherever the window happens to sit; drop the chrome height and the visible
+// pointer sits a tab-strip above whatever it clicks.
 const chromeY = await page.evaluate(() => window.outerHeight - window.innerHeight);
 const chromeX = await page.evaluate(() => Math.max(0, (window.outerWidth - window.innerWidth) / 2));
-console.log(`boxflow: chrome offset ${chromeX},${chromeY}`);
+console.log(`boxflow: window at ${winX},${winY} + chrome offset ${chromeX},${chromeY}`);
 
-const toScreen = (x, y) => [Math.round(x + chromeX), Math.round(y + chromeY)];
+const toScreen = (x, y) => [Math.round(winX + chromeX + x), Math.round(winY + chromeY + y)];
 const smooth = (p) => p * p * p * (10 - 15 * p + 6 * p * p);
 
-let curX = 40, curY = 40;
+let curX = winX + 40, curY = winY + 40;
 async function glide(x, y) {
   const d = Math.hypot(x - curX, y - curY);
   const steps = Math.max(8, Math.min(48, Math.round(d / 28)));

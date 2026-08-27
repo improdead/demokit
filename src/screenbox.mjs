@@ -89,35 +89,122 @@ export async function capture({ shotDir, flowPath, size = '2560x1440', fps = 30,
   mkdirSync(join(shotDir, 'frames'), { recursive: true });
 
   await run(bin, ['rm', '-f', name]).catch(() => {});
+  // The image's own entrypoint brings up Xvfb, dbus and a MATE session - that
+  // session is what makes the window chrome real. Let it do that, then correct
+  // the three things it does that a demo cannot use.
   await run(bin, ['run', '-d', '--name', name, '--shm-size=1g',
-    '-p', '9222:9222', '-e', `SCREEN=${W}x${H}x24`, IMAGE]);
+    '-p', '9223:9223',
+    '-e', `SCREENBOX_RESOLUTION=${W}x${H}`,
+    '-e', 'SCREENBOX_CHROME_URL=about:blank',
+    IMAGE]);
+  await new Promise((r) => setTimeout(r, 9000));
 
+  let geom = { x: 0, y: 0, w: W, h: H };
   try {
-    // Xvfb + a window manager, then Chromium filling the virtual display with
-    // its real chrome and remote debugging exposed to the host.
+    // 1. Its Chromium binds CDP to 127.0.0.1, which a published port cannot
+    //    reach from the host. 2. It opens a file manager and a terminal that
+    //    would both be in shot. 3. Nothing is sized for a demo.
+    const url = JSON.stringify(flow.url);
     await dexec(bin, name, ['bash', '-c',
-      `Xvfb ${DISPLAY} -screen 0 ${W}x${H}x24 -nolisten tcp >/dev/null 2>&1 &
-       sleep 1; marco --no-composite >/dev/null 2>&1 &
-       sleep 1;
-       chromium --no-sandbox --disable-gpu --remote-debugging-address=0.0.0.0 \
-         --remote-debugging-port=9222 --window-position=0,0 --window-size=${W},${H} \
-         --disable-features=TranslateUI --no-first-run ${JSON.stringify(flow.url)} \
-         >/dev/null 2>&1 &
-       sleep 4; xdotool search --class chromium windowactivate --sync %1 || true`]);
+      `# -x matches the process NAME. -f matches the whole command line, which
+       # includes this very command - so \`pkill -f chromium\` kills its own shell
+       # and the exec dies with 143 before anything starts.
+       pkill -x chromium || true; pkill -x mate-terminal || true; pkill -x caja || true
+       sleep 1
+       chromium --no-sandbox --disable-gpu --disable-dev-shm-usage --test-type \
+         --no-first-run --no-default-browser-check --disable-features=TranslateUI \
+         --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 \
+         --remote-allow-origins='*' ${url} >/tmp/chromium.log 2>&1 &
+       sleep 7`]);
 
+    // Chromium ignores --remote-debugging-address and binds CDP to loopback
+    // only, so a published port reaches nothing. python3 is already in the
+    // image; a nine-line TCP relay is cheaper than adding socat to it.
+    await run(bin, ['exec', '-d', name, 'python3', '-c',
+      `import socket,threading
+def pipe(a,b):
+    try:
+        while True:
+            d=a.recv(65536)
+            if not d: break
+            b.sendall(d)
+    except Exception: pass
+    finally:
+        for s_ in (a,b):
+            try: s_.close()
+            except Exception: pass
+srv=socket.socket(); srv.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+srv.bind(('0.0.0.0',9223)); srv.listen(64)
+while True:
+    c,_=srv.accept()
+    try:
+        u=socket.create_connection(('127.0.0.1',9222))
+    except Exception:
+        c.close(); continue
+    threading.Thread(target=pipe,args=(c,u),daemon=True).start()
+    threading.Thread(target=pipe,args=(u,c),daemon=True).start()`]);
+    await new Promise((r) => setTimeout(r, 1200));
+
+    // Size and centre the window, then read back where it actually landed. Only
+    // that rectangle is recorded - the MATE panels and the desktop behind are
+    // furniture, and filming them is the mistake the macOS path had to stage
+    // around.
+    const PANEL = 28;                       // MATE's top panel
+    const wW = Math.round(W * 0.90) & ~1;
+    const wH = Math.round((H - PANEL * 2) * 0.90) & ~1;
     await dexec(bin, name, ['bash', '-c',
-      `ffmpeg -y -f x11grab -draw_mouse 1 -framerate ${fps} -video_size ${W}x${H} \
-        -i ${DISPLAY} -c:v libx264 -preset ultrafast -qp 0 /tmp/box.mkv >/dev/null 2>&1 &
-       echo started`]);
+      `id=$(xdotool search --class chromium | tail -1)
+       xdotool windowsize $id ${wW} ${wH}
+       xdotool windowmove $id ${(W - wW) >> 1} ${Math.max(PANEL + 4, (H - wH) >> 1)}
+       xdotool windowactivate $id
+       sleep 1`]);
+    // The true window rect is NOT what xdotool reports. xdotool gives the CLIENT
+    // area, which excludes the title bar the WM draws around it - capture that
+    // and the top 32px of the window is missing while 32px of desktop shows at
+    // the bottom. xwininfo gives the client origin, _NET_FRAME_EXTENTS gives the
+    // decoration on each side, and the frame is the two combined.
+    const { stdout: g } = await dexec(bin, name, ['bash', '-c',
+      `id=$(xdotool search --class chromium | tail -1)
+       eval $(xwininfo -id $id | awk '/Absolute upper-left X/{print "CX="$4}
+                                      /Absolute upper-left Y/{print "CY="$4}
+                                      /^  Width:/{print "CW="$2}
+                                      /^  Height:/{print "CH="$2}')
+       ext=$(xprop -id $id _NET_FRAME_EXTENTS 2>/dev/null | sed 's/.*= //' | tr -d ' ')
+       L=\${ext%%,*}; ext=\${ext#*,}; R=\${ext%%,*}; ext=\${ext#*,}; T=\${ext%%,*}; B=\${ext#*,}
+       L=\${L:-0}; R=\${R:-0}; T=\${T:-0}; B=\${B:-0}
+       echo "X=$((CX-L))"; echo "Y=$((CY-T))"; echo "WIDTH=$((CW+L+R))"; echo "HEIGHT=$((CH+T+B))"`]);
+    const gv2 = Object.fromEntries(g.trim().split('\n').map((l) => l.trim().split('=')));
+    const gx = Math.max(0, Number(gv2.X) || 0);
+    const gy = Math.max(0, Number(gv2.Y) || 0);
+    geom = {
+      x: gx, y: gy,
+      w: Math.min(Number(gv2.WIDTH) || wW, W - gx) & ~1,
+      h: Math.min(Number(gv2.HEIGHT) || wH, H - gy) & ~1,
+    };
+    console.log(`screenbox: window ${geom.w}x${geom.h} at ${geom.x},${geom.y} on a ${W}x${H} desktop`);
+
+    // `docker exec ... "cmd &"` does not survive: the backgrounded process dies
+    // with the exec session. -d detaches it properly.
+    await run(bin, ['exec', '-d', '-e', `DISPLAY=${DISPLAY}`, name, 'bash', '-c',
+      `ffmpeg -y -f x11grab -draw_mouse 1 -framerate ${fps} `
+      + `-video_size ${geom.w}x${geom.h} -i '${DISPLAY}.0+${geom.x},${geom.y}' `
+      + `-c:v libx264 -preset ultrafast -qp 0 /tmp/box.mkv > /tmp/ff.log 2>&1`]);
+    await new Promise((r) => setTimeout(r, 1500));
+    const { stdout: rec } = await dexec(bin, name, ['bash', '-c',
+      'pgrep -x ffmpeg >/dev/null && echo recording || (echo FAILED; tail -4 /tmp/ff.log)']);
+    console.log('screenbox: ' + rec.trim().split('\n').join(' | '));
+    if (rec.includes('FAILED')) throw new Error('ffmpeg did not start');
 
     // The flow runs from the host over CDP - a bounding box is the only honest
     // way to know where a thing is - while xdotool puts the REAL pointer on the
     // same coordinates, so the cursor on screen and the click that lands are
     // one event instead of two that agree by luck.
-    console.log('screenbox: driving the flow over CDP at localhost:9222');
-    await run('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin],
-      { maxBuffer: 1 << 26, stdio: 'inherit' }).catch((e) => {
-        console.error('screenbox: flow failed: ' + (e.message || e).slice(0, 200));
+    console.log('screenbox: driving the flow over CDP at localhost:9223');
+    await run('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
+      String(geom.x), String(geom.y)],
+      { maxBuffer: 1 << 26, stdio: 'inherit',
+        env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '' } }).catch((e) => {
+        console.error('screenbox: flow failed: ' + String(e.message || e).slice(0, 200));
       });
 
     await dexec(bin, name, ['bash', '-c', 'pkill -INT ffmpeg; sleep 1.5']);
@@ -128,12 +215,12 @@ export async function capture({ shotDir, flowPath, size = '2560x1440', fps = 30,
     const files = readdirSync(join(shotDir, 'frames')).filter((f) => f.endsWith('.png')).sort();
     const frames = files.map((f, i) => ({ i: Number(f.slice(1, 6)), ms: Math.round((i * 1000) / fps) }));
     writeFileSync(join(shotDir, 'manifest.json'), JSON.stringify({
-      width: W, height: H, layout: [W, H], zoom: 1, dsf: 1,
+      width: geom.w, height: geom.h, layout: [geom.w, geom.h], zoom: 1, dsf: 1,
       source: 'screenbox',
       endMs: frames.length ? frames.at(-1).ms : 0,
       frames, clicks: [], path: [], actions: [],   // real cursor is in the pixels
     }, null, 1));
-    return { frames: frames.length, width: W, height: H };
+    return { frames: frames.length, width: geom.w, height: geom.h };
   } finally {
     if (!keep) await run(bin, ['rm', '-f', name]).catch(() => {});
   }
