@@ -142,9 +142,11 @@ def main():
     # detaches from the page and the zoom frames the toolbar instead.
     man["height"] = man["height"] + ch
     man["chrome"] = {"h": ch, "url": url, "theme": theme}
-    for key in ("clicks", "path", "actions"):
+    for key in ("clicks", "path", "actions", "events"):
         for e in man.get(key, []):
             e["y"] = e["y"] + ch
+            if "by" in e:            # events carry the element box too
+                e["by"] = e["by"] + ch
     json.dump(man, open(man_path, "w"), indent=1)
     print(f"chrome: {len(files)} frames, +{ch}px {theme} chrome, url={url}")
 

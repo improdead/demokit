@@ -373,11 +373,21 @@ export function buildGraph({
         return { startMs: zm.tMs - h / 2, endMs: zm.tMs + h / 2, targets: [{ ...s, tMs: zm.tMs }] };
       });
 
-  const envs = moves.map((mv) => {
-    const a = (mv.startMs / 1000) - ramp, b = (mv.endMs / 1000) + ramp;
-    const lin = `clip(min(min((${tv}-${a.toFixed(4)})/${ramp},(${b.toFixed(4)}-${tv})/${ramp}),1),0,1)`;
-    return `(3*pow(${lin},2)-2*pow(${lin},3))`;
-  });
+  const trapezoid = (aSec, bSec, rIn, rOut) =>
+    `clip(min(min((${tv}-${aSec.toFixed(4)})/${rIn.toFixed(4)},(${bSec.toFixed(4)}-${tv})/${rOut.toFixed(4)}),1),0,1)`;
+  const smooth = (e) => `(3*pow(${e},2)-2*pow(${e},3))`;
+
+  // Zoom amount.
+  const envs = moves.map((mv) => smooth(trapezoid((mv.startMs / 1000) - ramp, (mv.endMs / 1000) + ramp, ramp, ramp)));
+
+  // Framing centre, PRE-AIMED. While the zoom is still ~1x the viewport covers
+  // the whole frame, so the centre can be moved for free - and it must be,
+  // because a centre that arrives at the same rate as the zoom makes the camera
+  // slide sideways into its target instead of scaling straight at it. Cap calls
+  // this CENTER_PREAIM. The aim envelope simply leads the zoom envelope.
+  const aimLead = ramp * 2.2;
+  const aims = moves.map((mv) => smooth(trapezoid(
+    (mv.startMs / 1000) - aimLead, (mv.endMs / 1000) + ramp, ramp * 0.9, ramp)));
 
   // A move holds ONE depth - the shallowest its targets need, so every target
   // fits inside the crop as the camera pans between them.
@@ -405,10 +415,10 @@ export function buildGraph({
     : null;
   if (openEnv) terms.push(`(${(openPull - 1).toFixed(4)})*(${openEnv})`);
 
-  const allEnvs = openEnv ? envs.concat([openEnv]) : envs;
-  const sum = allEnvs.map((e) => `(${e})`).join('+');
-  const wxs = moves.map((mv, i) => `(${envs[i]})*(${panExpr(mv, 'cx')})`);
-  const wys = moves.map((mv, i) => `(${envs[i]})*(${panExpr(mv, 'cy')})`);
+  const allAims = openEnv ? aims.concat([openEnv]) : aims;
+  const sum = allAims.map((e) => `(${e})`).join('+');
+  const wxs = moves.map((mv, i) => `(${aims[i]})*(${panExpr(mv, 'cx')})`);
+  const wys = moves.map((mv, i) => `(${aims[i]})*(${panExpr(mv, 'cy')})`);
   if (openEnv) { wxs.push(`(${openEnv})*0.5`); wys.push(`(${openEnv})*0.5`); }
   const wx = wxs.join('+');
   const wy = wys.join('+');

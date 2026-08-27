@@ -44,6 +44,8 @@ const DEFAULTS = {
   chainGapMs: 3200,      // targets closer than this share one camera move
   preLeadMs: 350,        // start the move slightly before the target
   panMs: 420,            // ease between targets inside a chain
+  hoverIntent: true,     // an authored, labelled hover counts as a reason
+  maxTargets: 8,
 };
 
 /** Where the pointer actually was over a span - OpenScreen calls this the
@@ -132,8 +134,13 @@ export async function direct(shotDir, opts = {}) {
     const peak = near.length ? near.reduce((a, b) => (b.frac > a.frac ? b : a)) : null;
     const moved = peak && peak.frac >= o.changeFrac;
     const acted = e.kind === 'click' || e.kind === 'type' || e.kind === 'drag';
+    // A hover the flow AUTHOR wrote and labelled is intent - they said "look at
+    // this". The zooms that felt random were never those; they were beats that
+    // framed nothing and popped in and out. Framing and chaining fixed that, so
+    // an authored hover is a reason. An unlabelled one still is not.
+    const intended = e.kind === 'hover' && !!e.label && o.hoverIntent;
 
-    if (!acted && !moved) continue;      // rule 1: a hover that did nothing is not a reason
+    if (!acted && !moved && !intended) continue;   // rule 1: a reason, or nothing
 
     // rule 2: a rect, not a point. Prefer the element we acted on; fall back to
     // the region of the screen that actually changed.
@@ -141,6 +148,7 @@ export async function direct(shotDir, opts = {}) {
     if (e.w && e.h) {
       rect = [e.bx || e.x - e.w / 2, e.by || e.y - e.h / 2, e.w, e.h];
       why = `${e.kind}: ${e.label || 'element'}`;
+      if (intended && !acted && !moved) why += ' (authored)';
       if (moved) why += ` (+${(peak.frac * 100).toFixed(1)}% of frame changed)`;
     } else if (moved) {
       rect = [peak.x0, peak.y0, Math.max(24, peak.x1 - peak.x0), Math.max(24, peak.y1 - peak.y0)];
@@ -152,7 +160,8 @@ export async function direct(shotDir, opts = {}) {
     // the clicks that make the demo get pushed out.
     cands.push({
       tMs: e.t, rect: rect.map(Math.round), reason: why,
-      kind: e.kind, weight: (acted ? 100 : 0) + (moved ? Math.min(20, peak.frac * 40) : 0),
+      kind: e.kind,
+      weight: (acted ? 100 : 0) + (intended ? 40 : 0) + (moved ? Math.min(20, peak.frac * 40) : 0),
     });
   }
 
@@ -191,7 +200,7 @@ export async function direct(shotDir, opts = {}) {
     merged.push(c);
   }
   const kept = merged
-    .slice().sort((a, b) => b.weight - a.weight).slice(0, o.maxZooms)
+    .slice().sort((a, b) => b.weight - a.weight).slice(0, o.maxTargets)
     .sort((a, b) => a.tMs - b.tMs);
 
   // ---- 3. annotate each with where the pointer really was ------------------

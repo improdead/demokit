@@ -1,9 +1,9 @@
-node_modules/
+.assets/
+.cache/
 .tools/node_modules/
 .tools/package-lock.json
-vendor/
 *.mp4
 *.zip
-.cache/
-.assets/
+node_modules/
 out/
+vendor/

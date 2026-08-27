@@ -230,6 +230,54 @@ ffmpeg's `avfoundation` input is not used: it is killed on this machine
 (exit 137) even though the screen-recording permission is granted and
 `screencapture` works fine with it.
 
+## Recording decides nothing
+
+```
+record → events ──┐
+                  ├─> edit.mjs (director) ─> edit.json ─┐
+frames ───────────┘                                     ├─> render ─> review
+                                     recipe.json ───────┘
+```
+
+`record.js` used to call `mark()` while it drove the browser, so every hover
+became a zoom anchor - the edit was committed before a single frame existed, by
+whoever wrote the flow, blind. Everything downstream just executed it. That is
+recording with the edit pre-baked, and it is why the camera moved for no reason
+and never quite framed anything: the anchor was a POINT and the depth a
+SEPARATE global number, so the framing could not be accurate even in principle.
+
+Now recording emits events and the director decides the camera afterwards, from
+the events plus the frames, into an editable `edit.json`:
+
+```
+$ bin/demokit edit .cache/shot-trident
+edit: 5 camera move(s) covering 6 target(s) over 52.5s
+  13.6s-15.4s  hold
+        13.9s  3070x60   type: narrow to one asset (+8.8% of frame changed)
+  20.3s-24.4s  pan
+        20.6s   864x60   click: open the critical
+        22.9s   139x48   hover: CVSS 9.8 · CWE-798
+```
+
+- **A zoom needs a reason** - a click, a keystroke, a measured change, or a
+  hover the flow author explicitly labelled. It prints what it rejected too, so
+  the decision is auditable rather than silent.
+- **A zoom targets a rect**, and the renderer solves the crop that CONTAINS it.
+  A 3070px search bar gets ~1.06x; a 139px badge gets 1.6x.
+- **Nearby targets chain into one camera move** - zoom in, pan between them,
+  zoom out. A push-and-release per beat is what made the camera bob.
+- **The framing is pre-aimed.** While the zoom is ~1x the viewport covers
+  everything, so the centre moves for free - and must, or the camera slides
+  sideways into its target instead of scaling straight at it.
+- `edit.json` and `recipe.json` are plain files. Edit either and re-render; the
+  footage is untouched.
+
+Borrowed, with thanks: the document-not-recording split and `cursorAnchor`
+(median pointer position over a zoom's span, which immediately caught a zoom
+framing a rect the pointer was 1400px from) come from **OpenScreen**; zoom
+chains from **pagecast**; the recipe-beside-the-take and loud unknown-key
+warnings from **DemoTape**; pre-aim from **Cap**.
+
 ## Beats from change, not just clicks
 
 `src/beats.py` diffs consecutive frames at ~8fps, thresholds, clusters the
