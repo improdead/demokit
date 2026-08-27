@@ -10,8 +10,17 @@ Works on three sources, all through the same pipeline:
 | what you are demoing | command |
 | --- | --- |
 | a web app | `bin/demokit flows/<name>.json out.mp4` (write a flow — §7) |
+| a web app, with a **real cursor** | `bin/demokit box flows/<name>.json out.mp4` — needs Docker |
 | a CLI or a script | `bin/demokit term "<shell command>" out.mp4` |
 | a native app or the desktop | `bin/demokit screen out.mp4 --seconds 30` |
+
+`box` is the best of the three when Docker is available: Chromium inside a
+container with Xvfb and a window manager, so the pointer is a **real X11 cursor**
+moved by xdotool and the chrome is a **real browser window** — nothing is drawn,
+and it still runs in the background because the display does not physically
+exist. The flow is driven over CDP (a bounding box is the only honest way to
+know where a thing is) while xdotool puts the visible pointer on the same
+coordinates, so the cursor you see and the click that lands are one event.
 
 `term` runs the command in a pty and paints the frames itself — nothing is
 displayed, so it records in the background while the machine is being used, and

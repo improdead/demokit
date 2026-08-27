@@ -2,6 +2,7 @@
 # demokit — flow JSON in, demo MP4 out.
 #
 #   bin/demokit probe <url>                              # look before you plan
+#   bin/demokit box flows/x.json out.mp4                 # real cursor, in a container
 #   bin/demokit term "pytest -q" out.mp4                 # a terminal, rendered offscreen
 #   bin/demokit screen out.mp4 --app "Google Chrome" --seconds 30   # real cursor
 #   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
@@ -126,6 +127,24 @@ if [ "${1:-}" = "critic" ]; then
   shift; SHOT="${1:?usage: demokit critic <shotDir> <out.mp4> [--apply patch.json]}"; shift
   OUT="${1:?usage: demokit critic <shotDir> <out.mp4>}"; shift
   exec node src/critic.mjs "$SHOT" "$OUT" "$@"
+fi
+
+# Browser capture inside a container with a real desktop: real X11 cursor, real
+# window chrome, and it runs on a display that does not physically exist.
+if [ "${1:-}" = "box" ]; then
+  shift; FLOW="${1:?usage: demokit box <flow.json> <out.mp4> [--size WxH] [render flags]}"; shift
+  OUT="${1:?usage: demokit box <flow.json> <out.mp4>}"; shift
+  SHOT=".cache/shot-box"
+  BOXARGS=(); RENDARGS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --size|--fps) BOXARGS+=("$1" "$2"); shift 2;;
+      --keep) BOXARGS+=("$1"); shift;;
+      *) RENDARGS+=("$1"); shift;;
+    esac
+  done
+  node src/screenbox.mjs "$SHOT" --flow "$FLOW" "${BOXARGS[@]+"${BOXARGS[@]}"}" || exit 1
+  exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
 fi
 
 if [ "${1:-}" = "wallpapers" ]; then
