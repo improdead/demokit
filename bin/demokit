@@ -3,7 +3,7 @@
 #
 #   bin/demokit probe <url>                              # look before you plan
 #   bin/demokit term "pytest -q" out.mp4                 # a terminal, rendered offscreen
-#   bin/demokit screen out.mp4 --seconds 30              # a native app / the desktop
+#   bin/demokit screen out.mp4 --app "Google Chrome" --seconds 30   # real cursor
 #   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
 #   bin/demokit wallpapers all                           # 4K grounds, local + fetched
 #   bin/demokit edit <shotDir>                           # why the camera moves, as a file
@@ -104,7 +104,7 @@ if [ "${1:-}" = "screen" ]; then
   SCRARGS=(); RENDARGS=()
   while [ $# -gt 0 ]; do
     case "$1" in
-      --seconds|--display|--region|--fps) SCRARGS+=("$1" "$2"); shift 2;;
+      --seconds|--display|--region|--fps|--app|--fill) SCRARGS+=("$1" "$2"); shift 2;;
       *) RENDARGS+=("$1"); shift;;
     esac
   done

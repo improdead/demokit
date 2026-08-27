@@ -38,7 +38,7 @@ const DEFAULTS = {
   changeFrac: 0.0025,    // pixels that must move for "something happened"
   lookBackMs: 3000,      // a result arrives before the beat that reports it
   lookFwdMs: 1400,
-  maxZooms: 6,
+  maxZooms: 2,          // the version that read well had NO zoom; two is generous
   sceneFrac: 0.45,       // more of the frame than this changed = a scene change
   sceneArea: 0.45,       // a target covering more of the frame than this is not one
   chainGapMs: 8000,      // targets closer than this share one camera move
@@ -46,10 +46,10 @@ const DEFAULTS = {
   usefulFill: 0.55,      // target should span this much of the frame when framed
   preLeadMs: 350,        // start the move slightly before the target
   panMs: 420,            // ease between targets inside a chain
-  hoverIntent: true,     // an authored, labelled hover counts as a reason
+  hoverIntent: false,    // clicks and keystrokes only, unless asked otherwise
   minHoldMs: 900,        // never shorter than this once the camera has moved
   settleMs: 700,         // linger this long after the last thing that moved
-  maxTargets: 5,
+  maxTargets: 3,
   blankFrac: 0.45,       // below this share of the usual on-screen content = blank
 };
 

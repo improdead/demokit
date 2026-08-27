@@ -112,7 +112,7 @@ const r = await render({
   // capture is 2x device pixels; downscale to 1080p so the picture is sharp
   outW: Number(arg('w', '1920')), outH: Number(arg('h', '1080')),
   level: Number(arg('level', '1.4')),
-  inset: Number(arg('inset', '0.8')),
+  inset: Number(arg('inset', '0.66')),
   centerBias: Number(arg('bias', '0.4')),
   minGapMs: Number(arg('gap', '1500')),
   maxLevel: Number(arg('deep', '1.7')),

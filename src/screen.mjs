@@ -21,7 +21,25 @@ import { join } from 'node:path';
 
 const run = promisify(execFile);
 
-export async function captureScreen({ shotDir, seconds, display = 1, region = null, fps = 30 }) {
+export async function captureScreen({ shotDir, seconds, display = 1, region = null, fps = 30, app = null, fill = 0.78 }) {
+  // Stage the window first. Filming the whole display puts the dock, the menu
+  // bar, other windows and the desktop wallpaper in the frame - all of which
+  // then fight the backdrop we composite onto. A staged window gives the same
+  // clean rectangle the browser path produces, except the cursor and the window
+  // chrome are real pixels rather than drawn ones.
+  let staged = null, stageMod = null;
+  if (app && !region) {
+    stageMod = await import('./stage.mjs');
+    if (app === 'auto') {
+      app = await stageMod.frontApp();
+      console.log(`stage: front app is ${app}`);
+    }
+    staged = await stageMod.stage({ app, fill, display });
+    region = [staged.region.x, staged.region.y, staged.region.w, staged.region.h];
+    console.log(`stage: ${app} -> ${staged.region.w}x${staged.region.h} at `
+      + `${staged.region.x},${staged.region.y} on a ${staged.display.w}x${staged.display.h} display`
+      + (staged.exact ? '' : '  (app clamped the size)'));
+  }
   rmSync(shotDir, { recursive: true, force: true });
   mkdirSync(join(shotDir, 'frames'), { recursive: true });
   const mov = join(shotDir, 'screen.mov');
@@ -56,6 +74,7 @@ export async function captureScreen({ shotDir, seconds, display = 1, region = nu
   writeFileSync(join(shotDir, 'manifest.json'), JSON.stringify({
     width: w, height: h, layout: [w, h], zoom: 1, dsf: 1,
     source: 'screen',
+    staged: staged ? { app, ...staged } : null,
     endMs: Math.round(dur * 1000),
     frames,
     clicks: [],     // filled by beats.py - there is no click log for a desktop
@@ -64,6 +83,10 @@ export async function captureScreen({ shotDir, seconds, display = 1, region = nu
   }, null, 1));
 
   rmSync(mov, { force: true });
+  if (staged && stageMod && staged.before) {
+    await stageMod.restore(app, staged.before);
+    console.log('stage: window put back where it was');
+  }
   return { width: w, height: h, frames: frames.length, duration: dur };
 }
 
@@ -71,7 +94,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const [, , shotDir, ...rest] = process.argv;
   const arg = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
   if (!shotDir) {
-    console.error('usage: screen.mjs <shotDir> --seconds N [--display 1] [--region x,y,w,h] [--fps 30]');
+    console.error('usage: screen.mjs <shotDir> --seconds N [--app "Google Chrome"] [--fill 0.78]');
+    console.error('                              [--display 1] [--region x,y,w,h] [--fps 30]');
     process.exit(2);
   }
   const region = arg('region', null);
@@ -80,6 +104,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     seconds: Number(arg('seconds', '20')),
     display: Number(arg('display', '1')),
     region: region ? region.split(',').map(Number) : null,
+    app: arg('app', null),
+    fill: Number(arg('fill', '0.78')),
     fps: Number(arg('fps', '30')),
   });
   console.log(`screen: ${r.frames} frames @ ${r.width}x${r.height}, ${r.duration.toFixed(1)}s -> ${shotDir}`);

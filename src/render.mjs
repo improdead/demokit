@@ -126,7 +126,7 @@ export const BACKDROPS = {
 };
 
 /** Pick a backdrop from how bright the recording actually is. */
-export async function pickBackdrop(framePath) {
+export async function pickBackdrop(framePath, dir0 = process.cwd()) {
   const py = `
 from PIL import Image
 im = Image.open(${JSON.stringify(framePath)}).convert('L').resize((64, 36))
@@ -136,6 +136,11 @@ print(sum(px) / len(px))`;
   const lum = parseFloat(stdout.trim());
   // dark app -> rich, lighter ground; light app -> dark ground. Matches the
   // standard guidance that a background exists to separate, not to blend.
+  // Prefer a real wallpaper when one is on disk. The generated grounds were
+  // built to recede so hard they read as a gradient; the look being copied is
+  // saturated and high-contrast, with the window floating ON it.
+  const wall = join(dir0, '.cache', 'wallpapers', 'mac-sonoma.png');
+  if (existsSync(wall)) return wall;
   return lum < 90 ? 'dusk' : lum > 170 ? 'noir' : 'slate';
 }
 
@@ -494,10 +499,15 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   if (_h > _compH * _inset) { _h = _compH * _inset; _w = _h * _ar; }
   const fgW = even(Math.round(_w));
   const fgH = even(Math.round(_h));
+  // Padding, corner radius and shadow all scale with the capture, and all three
+  // are bigger than they were. The reference look is a small window floating on
+  // a lot of colour with a deep soft shadow - a 0.8 inset with a 22px blur reads
+  // as a screenshot with a border, not as an object above a surface.
   const { mask, shadow, pad } = await makeAssets({
     dir: assetDir, w: fgW, h: fgH,
-    radius: Math.round(18 * (srcW / 1920)), pad: Math.round(40 * (srcW / 1920)),
-    shadowBlur: Math.round(22 * (srcW / 1920)), shadowDy: Math.round(14 * (srcW / 1920)),
+    radius: Math.round(26 * (srcW / 1920)), pad: Math.round(120 * (srcW / 1920)),
+    shadowBlur: Math.round(62 * (srcW / 1920)), shadowDy: Math.round(34 * (srcW / 1920)),
+    shadowAlpha: 150,
   });
 
   // chrome > cursor > raw: each pass writes a new dir rather than mutating the
@@ -515,7 +525,7 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   const backdrop = bgSpec === 'blur' ? null
     : await makeBackdrop({
         dir: assetDir, w: even(srcW), h: even(Math.round(srcW * (outH / outW))), spec: bgSpec,
-        treatBlur: opts.bgBlur ?? 0.004, treatSat: opts.bgSat ?? 0.82, treatDim: opts.bgDim2 ?? 0.92,
+        treatBlur: opts.bgBlur ?? 0.0, treatSat: opts.bgSat ?? 1.0, treatDim: opts.bgDim2 ?? 1.0,
       });
 
   // concat with real per-frame durations so wall-clock timing survives.
