@@ -285,19 +285,16 @@ export function buildGraph({
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
   minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500, edl = null, panMs = 420,
 }) {
-  let ZOOMCHAIN = 'null';
   const parts = [];
   // Cursor and click pulses are already composited into the frames by
   // src/cursor.py - it interpolates the dense pointer path per frame, which an
   // ffmpeg overlay expression cannot do without encoding hundreds of samples.
   parts.push(`[0:v]fps=${fps}[withcur]`);
-  // The zoom happens INSIDE the recording, before it is inset onto the
-  // backdrop. Zooming the whole composite instead let the crop wander off the
-  // window and clamp against the canvas edge, so a peak framed a third of
-  // wallpaper with the window sliced off - and no amount of clamping fixes
-  // that, because the crop was never constrained to the content in the first
-  // place. Zoom the footage, then frame it: the window cannot move.
-  parts.push(`[withcur]__ZOOMCHAIN__[zoomed]`);
+  // The zoom runs on the FINISHED composite - window, chrome, shadow and
+  // backdrop together - so pushing in reads as a camera moving toward one
+  // physical object. Zooming the recording alone and insetting it afterwards
+  // pins the window and slides content inside it, which looks like an iframe,
+  // not a camera: the frame and the ground stop belonging to the same scene.
 
   // ---- frame composite (at capture resolution) -----------------------------
   //
@@ -323,11 +320,11 @@ export function buildGraph({
     // because zoompan crops from this canvas at composite resolution.
     parts.push(
       `[${B}:v]scale=${compW}:${compH}:flags=lanczos,setsar=1[bg]`,
-      `[zoomed]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
+      `[withcur]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
   } else {
     // Legacy: blur the recording behind itself. Kept for --bg blur.
     parts.push(
-      `[zoomed]split=2[fga_src][bg_src]`,
+      `[withcur]split=2[fga_src][bg_src]`,
       `[bg_src]scale=${compW}:${compH}:force_original_aspect_ratio=increase,crop=${compW}:${compH},` +
         `gblur=sigma=${Math.round(blurSigma * (compW / 1920))},eq=brightness=-${bgDim}:saturation=${bgSat}[bg]`,
       `[fga_src]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
@@ -352,14 +349,13 @@ export function buildGraph({
   }));
   if (!zooms.length) {
     parts.push(`[flat]scale=${outW}:${outH}:flags=lanczos[out]`);
-    return parts.join(';').replace('__ZOOMCHAIN__', 'null');
+    return parts.join(';');
   }
 
-  // Source space: no inset offset, no canvas. The crop simply cannot leave the
-  // recording, which is the whole point of doing this first.
-  // ox/oy from the composite are irrelevant here: the crop is in source space.
-  const sx = 1, sy = 1, zOx = 0, zOy = 0;
-  const zW = srcW, zH = srcH;
+  // Composite space: the crop moves over the whole scene.
+  const sx = fgW / srcW, sy = fgH / srcH;
+  const zOx = ox, zOy = oy;
+  const zW = compW, zH = compH;
   const tv = `(in/${fps})`;
 
   /** Solve the crop that CONTAINS a rect. Exact, rather than a depth guess
@@ -382,9 +378,18 @@ export function buildGraph({
     // backdrop with the window sliced through the middle - which reads as
     // broken, not as a zoom. A real screen recording never shows that: when it
     // pushes in, it is inside the content.
+    // Anchor the camera on the SCENE, not purely on the target. Aiming dead at
+    // an off-centre element pushes the window's far edge out of frame and the
+    // shot reads as mis-aimed rather than deliberate - both targets here sit on
+    // the right, so the window's left edge kept falling off. Blend toward the
+    // window's centre: the push still goes to the target, the scene stays put.
+    const wcx = ox + fgW / 2, wcy = oy + fgH / 2;
+    const b = Math.max(0, Math.min(0.9, centerBias));
+    const tx = (rx + rw / 2) * (1 - b) + wcx * b;
+    const ty = (ry + rh / 2) * (1 - b) + wcy * b;
     const halfW = zW / (2 * z), halfH = zH / (2 * z);
-    const cx = Math.max(halfW, Math.min(zW - halfW, rx + rw / 2));
-    const cy = Math.max(halfH, Math.min(zH - halfH, ry + rh / 2));
+    const cx = Math.max(halfW, Math.min(zW - halfW, tx));
+    const cy = Math.max(halfH, Math.min(zH - halfH, ty));
     return { z, cx, cy };
   };
 
@@ -454,12 +459,22 @@ export function buildGraph({
   // single downscale to the delivery size happens after it. At max zoom the
   // cropped region is ~compW/level wide, which lands near 1:1 with the output
   // instead of being blown up.
-  ZOOMCHAIN = `zoompan=z='${z}'`
-    + `:x='max(0,min(((${wx})/max(${sum},0.0001))*iw*zoom-ow/2,iw*zoom-ow))'`
-    + `:y='max(0,min(((${wy})/max(${sum},0.0001))*ih*zoom-oh/2,ih*zoom-oh))'`
-    + `:d=1:s=${zW}x${zH}:fps=${fps}`;
-  parts.push(`[flat]scale=${outW}:${outH}:flags=lanczos[out]`);
-  return parts.join(';').replace('__ZOOMCHAIN__', ZOOMCHAIN);
+  // zoompan's x/y are in INPUT coordinates, not the zoom-scaled space.
+  //
+  // This was wrong from the first version and it explains every "the crop is
+  // off to the right and shows backdrop" symptom since. `fx*iw*zoom - ow/2`
+  // placed a crop that should have started at 823 at 1440 - ~600px off at 1.75x,
+  // and worse the deeper the zoom. Verified against a marked canvas: with
+  // fx=0.5 the centre pixel landed at 805 instead of 1920. The crop is
+  // [x, x + ow/zoom] in input space, so centring it means subtracting HALF THE
+  // CROP, not half the output.
+  parts.push(
+    `[flat]zoompan=z='${z}'`
+    + `:x='max(0,min(((${wx})/max(${sum},0.0001))*iw-(ow/zoom)/2,iw-ow/zoom))'`
+    + `:y='max(0,min(((${wy})/max(${sum},0.0001))*ih-(oh/zoom)/2,ih-oh/zoom))'`
+    + `:d=1:s=${compW}x${compH}:fps=${fps}[zoomed]`,
+    `[zoomed]scale=${outW}:${outH}:flags=lanczos[out]`);
+  return parts.join(';');
 }
 
 export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ...opts }) {
