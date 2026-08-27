@@ -105,12 +105,22 @@ export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 25,
     //    reach from the host. 2. It opens a file manager and a terminal that
     //    would both be in shot. 3. Nothing is sized for a demo.
     const url = JSON.stringify(flow.url);
+    // ~2.8% of the display height. Proportion is what matters, not a pixel
+    // count: the same 24px cursor that reads correctly at 720p disappears at 4K.
+    const cursorPx = Math.max(24, Math.round(H * 0.028));
     await dexec(bin, name, ['bash', '-c',
       `# -x matches the process NAME. -f matches the whole command line, which
        # includes this very command - so \`pkill -f chromium\` kills its own shell
        # and the exec dies with 143 before anything starts.
        pkill -x chromium || true; pkill -x mate-terminal || true; pkill -x caja || true
        sleep 1
+       # The cursor is a REAL X11 cursor - it is in the frames because x11grab
+       # draws it, and it shows the right SHAPE (pointer over links, I-beam over
+       # inputs) which a drawn arrow never can. What it was not, was visible:
+       # the default 24px cursor on a 4288x2560 display is 1% of the frame
+       # height, and after the capture is downscaled to 1080p it is a smudge.
+       # XCURSOR_SIZE is read by Chromium at startup, so it has to be set here.
+       export XCURSOR_THEME=Adwaita XCURSOR_SIZE=${cursorPx}
        chromium --no-sandbox --disable-gpu --disable-dev-shm-usage --test-type \
          --no-first-run --no-default-browser-check --disable-features=TranslateUI \
          --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 \
@@ -313,8 +323,13 @@ while True:
       // path stays empty on purpose: the cursor is REAL in these frames, so
       // cursor.py must not draw a second one over it.
       ...(evt
+        // `pointer` is the recorded cursor track, and it is NOT `path`: path is
+        // what cursor.py draws, and these frames already contain a real cursor.
+        // Dropping it entirely was the bug - the director then had nothing to
+        // follow and fell back to element boxes.
         ? { frames, events: evt.events, clicks: evt.events, actions: evt.actions,
-            proof: evt.proof || [], path: [], sync: { flashIdx, shift } }
+            proof: evt.proof || [], path: [], pointer: evt.path || [],
+            sync: { flashIdx, shift } }
         : { frames, clicks: [], path: [], actions: [] }),
     }, null, 1));
     return { frames: frames.length, width: geom.w, height: geom.h };

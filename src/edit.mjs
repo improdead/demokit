@@ -53,7 +53,14 @@ const DEFAULTS = {
   settleMs: 700,         // linger this long after the last thing that moved
   maxTargets: 3,
   mode: 'clicks',        // 'clicks' = one push per click; 'smart' = the full director
-  clickZoom: 1.85,       // fixed depth, so every push reads the same
+  // Fixed depth, so every push reads the same - but the value is not a taste
+  // setting. Depth is what BUYS centring: the camera can only move the crop
+  // within `window - canvas/z`, so at 1.85 only a click in the middle 20% of
+  // the frame can be centred on at all and everything else silently clamps to
+  // the window edge. That was the "zooms somewhere random" - it was not aiming
+  // wrong, it was unable to aim. 2.2 covers the middle ~35%, which is where
+  // clicks in a real UI actually land.
+  clickZoom: 2.2,
   clickHoldMs: 1500,     // in, hold, out
   zoomTyping: false,
   blankFrac: 0.45,       // below this share of the usual on-screen content = blank
@@ -133,7 +140,11 @@ print(json.dumps({"track": out, "ink": inks}))`;
  */
 function directClicks(man, o) {
   const events = man.events || [];
-  const path = man.path || [];
+  // `pointer` is the container path's real cursor track; `path` is the drawn
+  // one. Either is a cursor, and the camera follows whichever exists - reading
+  // only `path` meant the container path had no track at all and every anchor
+  // fell back to an element box.
+  const path = (man.pointer && man.pointer.length) ? man.pointer : (man.path || []);
   const clicks = events.filter((e) => e.kind === 'click' || (o.zoomTyping && e.kind === 'type'));
 
   const chains = [];
@@ -145,9 +156,20 @@ function directClicks(man, o) {
     // back to the event's own coordinates when there is no pointer track, which
     // is the case for the container path: its cursor is real, so nothing logs a
     // synthetic one.
-    const a = path.length ? cursorAnchor(path, e.t - 250, e.t + 250) : null;
+    // The window is deliberately lopsided: a little before the click, well past
+    // it. Samples from before the pointer has arrived drag the anchor back along
+    // the approach, which puts the camera behind the cursor.
+    const a = path.length ? cursorAnchor(path, e.t - 120, e.t + 450) : null;
     const cx = a ? a.x : e.x;
     const cy = a ? a.y : e.y;
+    // Two independent measurements of the same point: where the flow put the
+    // pointer, and where the capture saw it. They should agree. Saying so out
+    // loud is how the anchor bug would have been caught the first time.
+    if (a && Math.hypot(a.x - e.x, a.y - e.y) > 24) {
+      console.log(`  NOTE: pointer track and click coords disagree by `
+        + `${Math.round(Math.hypot(a.x - e.x, a.y - e.y))}px on "${e.label}" `
+        + `(track ${a.x},${a.y} vs event ${e.x},${e.y}) - following the track`);
+    }
     const halfW = Math.round(man.width / (2 * o.clickZoom));
     const halfH = Math.round(man.height / (2 * o.clickZoom));
     chains.push({

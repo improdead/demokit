@@ -323,13 +323,17 @@ for (const s of flow.steps) {
     }
     await page.waitForTimeout(s.ms ?? 1400);
     if (s.beat !== false && s.beatAfter) {
-      const nb = await loc.boundingBox({ timeout: 1200 }).catch(() => null);
-      if (nb) {
-        ev.x = Math.round(toScreen(nb.x + nb.width / 2, nb.y + nb.height / 2)[0] - winX);
-        ev.y = Math.round(toScreen(nb.x + nb.width / 2, nb.y + nb.height / 2)[1] - winY);
-        ev.w = Math.round(nb.width * DSF); ev.h = Math.round(nb.height * DSF);
-        ev.bx = Math.round(nb.x * DSF + chromeX); ev.by = Math.round(nb.y * DSF + chromeY);
-      }
+      // `beatAfter` delays WHEN the beat lands so the camera arrives after the
+      // change has rendered. It must not move WHERE it lands.
+      //
+      // This used to re-measure the selector after the action and overwrite the
+      // anchor with the result - and after a click that navigates, the selector
+      // matches a different element in a different place. "open the critical"
+      // anchored at y=340, up in the breadcrumb, because the finding's title had
+      // moved into the detail header. That is the random zoom: the camera was
+      // framing where the text ended up, not where the cursor clicked.
+      //
+      // The pointer is the subject. It does not move because the page did.
       ev.t = now();
       events.push(ev);
     }

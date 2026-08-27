@@ -292,7 +292,13 @@ export function buildGraph({
   // upscale 1.35x throws away the 2560 capture at exactly the moment the
   // viewer is looking closest. Instead we crop from the full-res canvas and
   // downscale ONCE, at the end.
-  inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0.4, minGapMs = 1500,
+  // centerBias blends the aim toward the middle of the window. It defaulted to
+  // 0.4, which means the camera went 40% of the way from the cursor to the
+  // centre - the single largest reason a push looked like it landed somewhere
+  // arbitrary. The cursor is the subject; blending away from it is a choice
+  // that has to be asked for.
+  inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0, minGapMs = 1500,
+  edgeSnap = 0,
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
   minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500, edl = null, panMs = 420,
 }) {
@@ -382,23 +388,56 @@ export function buildGraph({
       ? zm.z
       : Math.max(1.0, Math.min(maxLevel, Math.min(zW / Math.max(1, cw), zH / Math.max(1, chh))));
 
-    // Keep the crop INSIDE the window. Clamping only to the canvas lets the
-    // frame straddle the window edge, so you get a slice of UI and a slice of
-    // backdrop with the window sliced through the middle - which reads as
-    // broken, not as a zoom. A real screen recording never shows that: when it
-    // pushes in, it is inside the content.
-    // Anchor the camera on the SCENE, not purely on the target. Aiming dead at
-    // an off-centre element pushes the window's far edge out of frame and the
-    // shot reads as mis-aimed rather than deliberate - both targets here sit on
-    // the right, so the window's left edge kept falling off. Blend toward the
-    // window's centre: the push still goes to the target, the scene stays put.
     const wcx = ox + fgW / 2, wcy = oy + fgH / 2;
     const b = Math.max(0, Math.min(0.9, centerBias));
     const tx = (rx + rw / 2) * (1 - b) + wcx * b;
     const ty = (ry + rh / 2) * (1 - b) + wcy * b;
     const halfW = zW / (2 * z), halfH = zH / (2 * z);
-    const cx = Math.max(halfW, Math.min(zW - halfW, tx));
-    const cy = Math.max(halfH, Math.min(zH - halfH, ty));
+
+    // The crop must stay inside the WINDOW. It used to be clamped to the canvas,
+    // so a target near an edge produced a frame holding 600px of backdrop with
+    // the window sliced down the middle - exactly what the comment that used to
+    // sit here claimed it prevented.
+    const loX = ox + halfW, hiX = ox + fgW - halfW;
+    const loY = oy + halfH, hiY = oy + fgH - halfH;
+
+    // On Cap's travel space, and why it is not used by default.
+    //
+    // Cap (crates/rendering/src/zoom.rs, `from_amount_center`) maps the focus to
+    // a scalar spread PROPORTIONALLY across the set of in-bounds framings: 0 is
+    // flush to the left edge, 1 flush to the right. It is a good design for what
+    // Cap does - follow a cursor cluster that drifts across a whole segment,
+    // with corners reachable and no post-correction.
+    //
+    // It is the wrong design for one click. Proportional mapping systematically
+    // decentres a single point: measured on this take, a cursor 39% across the
+    // window framed 279px off centre, and with edge snapping on top of it, 313px.
+    // The requirement here is "the click is in the middle of the frame", so the
+    // focus is used directly and only clamped when centring would pull the crop
+    // off the window. In the interior - where a click almost always is - the
+    // cursor lands dead centre, and near an edge the frame stops at the edge
+    // instead of showing backdrop.
+    const snapToEdges = (v, r) => {
+      const lo = r, hi = 1 - r + 0.0001;
+      if (hi <= lo) return 0.5;
+      return Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+    };
+    // A crop wider than the window cannot sit inside it; centre it rather than
+    // sliding off-target, and let the depth solver be what fixes that.
+    const place = (focus, lo, hi, o0, span, mid) => {
+      if (!(hi > lo)) return mid;
+      if (edgeSnap > 0) return lo + snapToEdges((focus - o0) / Math.max(1, span), edgeSnap) * (hi - lo);
+      return Math.max(lo, Math.min(hi, focus));
+    };
+    const cx = place(tx, loX, hiX, ox, fgW, wcx);
+    const cy = place(ty, loY, hiY, oy, fgH, wcy);
+    // Say when the frame could not be centred on the cursor. The offset is not a
+    // bug - it is the window edge - but an unexplained one reads as a mis-aim.
+    const off = Math.round(Math.hypot(cx - tx, cy - ty));
+    if (off > compW * 0.02) {
+      console.log(`  NOTE: "${zm.reason}" framed ${off}px off the cursor - it sits `
+        + `within half a frame of the window edge, so centring would show backdrop`);
+    }
     return { z, cx, cy };
   };
 

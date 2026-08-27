@@ -430,11 +430,61 @@ justified individually. It still read as arbitrary, because *defensible* and
 camera that moves when they clicked and is still the rest of the time, or they
 see one that wanders.
 
-- `--zoom 1.85` sets the depth. Every push is the same distance, so the rhythm
-  is predictable rather than a series of different-sized surprises.
+- `--zoom 2.2` sets the depth. Every push is the same distance, so the rhythm is
+  predictable rather than a series of different-sized surprises.
 - Two clicks closer than `minGapMs` produce one push, not two.
 - Hovers, keystrokes and page changes move nothing. If the demo needs the camera
   somewhere, **click there**.
+
+### The camera follows the cursor, and depth is what lets it
+
+Anchor on the **pointer**, never on the element box. The box moves when the page
+does: `beatAfter` re-measured the selector after the click, and after a click
+that navigates the selector matches a different element somewhere else entirely.
+One click anchored at y=340, up in the breadcrumb, because the finding's title
+had moved into the detail header. The camera was framing where the text ended
+up. That is what "zooms somewhere random" actually was.
+
+Then **depth is not a taste setting — it is what buys centring.** The crop can
+only move within `window − canvas/z`, so:
+
+| `--zoom` | can centre a click within |
+|---|---|
+| 1.85 | the middle **20%** of the frame |
+| 2.2 | the middle **35%** |
+| 2.5 | the middle **42%** |
+
+At 1.85 almost every click is outside that band, so the framing silently clamps
+to the window edge and lands short of the cursor. It was not aiming wrong, it was
+*unable* to aim. When the clamp binds, the render says so by name rather than
+leaving an unexplained offset.
+
+**Why not Cap's travel space.** Cap maps the focus proportionally across the set
+of in-bounds framings (`from_amount_center` in `crates/rendering/src/zoom.rs`),
+with an edge-snap band on top. That is right for what Cap does — follow a cursor
+cluster drifting across a whole segment, corners reachable, no post-correction.
+It is wrong for a single click, because proportional mapping systematically
+decentres a point: measured on one take, a cursor 39% across the window framed
+279px off centre, and 313px with edge snapping. Centre on the focus and clamp
+only at the edge. `--edgesnap 0.25` restores Cap's behaviour if a flow wants it.
+
+Two more things that were quietly wrong:
+
+- **`--bias` defaulted to 0.4** — the aim was blended 40% of the way from the
+  cursor toward the middle of the window. It is 0 now. The cursor is the subject.
+- **The crop was clamped to the canvas, not the window**, so a target near an
+  edge could produce a frame holding 600px of backdrop with the window sliced
+  down the middle.
+
+### The cursor is real, and it has to be visible
+
+The container path records with `x11grab -draw_mouse 1`, so the cursor in the
+frames is the actual X11 cursor at the actual position — and it shows the right
+*shape*, pointer over links and I-beam over inputs, which a drawn arrow never
+does. What it was not, was visible: the default 24px cursor on a 4288x2560
+display is 1% of the frame height. `XCURSOR_THEME=Adwaita` and `XCURSOR_SIZE`
+at ~2.8% of display height fix that, and Chromium reads both at startup, so they
+have to be set on its launch line.
 
 ## 8c. The frame — a window floating on a ground
 
