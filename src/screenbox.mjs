@@ -72,7 +72,7 @@ export async function buildImage(bin, contextDir) {
 const dexec = (bin, name, args, opts = {}) =>
   run(bin, ['exec', '-e', `DISPLAY=${DISPLAY}`, name, ...args], { maxBuffer: 1 << 26, ...opts });
 
-export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 25, keep = false, dsf = 2 }) {
+export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 30, keep = false, dsf = 2 }) {
   const pre = await preflight();
   if (!pre.ok) {
     for (const p of pre.problems) console.error('screenbox: ' + p);
@@ -349,7 +349,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   const r = await capture({
     shotDir, flowPath: arg('flow'), size: arg('size', '4288x2560'),
-    fps: Number(arg('fps', '25')), dsf: Number(arg('dsf', '2')), keep: rest.includes('--keep'),
+    fps: Number(arg('fps', '30')), dsf: Number(arg('dsf', '2')), keep: rest.includes('--keep'),
   });
   console.log(`screenbox: ${r.frames} frames @ ${r.width}x${r.height} -> ${shotDir}`);
 }

@@ -46,7 +46,11 @@ const DEFAULTS = {
                          // long enough that the camera reads as stuck, not moving.
   minUseful: 1.25,       // below this a "zoom" is drift; stay still instead
   usefulFill: 0.55,      // target should span this much of the frame when framed
-  preLeadMs: 350,        // start the move slightly before the target
+  // The push starts ON the click, not before it. A 350ms pre-lead meant the
+  // camera was already moving while the pointer was still travelling, so the
+  // zoom read as happening for no reason - it began before the thing that
+  // caused it. Click, then push.
+  preLeadMs: 0,
   panMs: 420,            // ease between targets inside a chain
   hoverIntent: false,    // clicks and keystrokes only, unless asked otherwise
   minHoldMs: 900,        // never shorter than this once the camera has moved
@@ -150,16 +154,20 @@ function directClicks(man, o) {
   const chains = [];
   for (const e of clicks) {
     const last = chains.at(-1);
-    if (last && e.t - last.targets[0].tMs < o.minGapMs) continue;   // no double push
     // Anchor on where the POINTER is, not on the element box - that is what the
     // viewer's eye follows, and it is what "focus on the cursor" means. Falls
     // back to the event's own coordinates when there is no pointer track, which
     // is the case for the container path: its cursor is real, so nothing logs a
     // synthetic one.
-    // The window is deliberately lopsided: a little before the click, well past
-    // it. Samples from before the pointer has arrived drag the anchor back along
-    // the approach, which puts the camera behind the cursor.
-    const a = path.length ? cursorAnchor(path, e.t - 120, e.t + 450) : null;
+    // Aim at where the pointer was when it CLICKED, not when the beat lands.
+    // `beatAfter` puts e.t after the change has rendered, and a forward window
+    // from there runs straight into the NEXT step's glide - the cross-check
+    // below caught it anchoring 157px away, on a cursor already leaving for
+    // somewhere else.
+    const act = (man.actions || []).find((x) => x.label === e.label && x.t <= e.t + 50);
+    const at = e.at ?? (act ? act.t : e.t);
+    if (last && at - last.targets[0].tMs < o.minGapMs) continue;   // no double push
+    const a = path.length ? cursorAnchor(path, at - 250, at + 350) : null;
     const cx = a ? a.x : e.x;
     const cy = a ? a.y : e.y;
     // Two independent measurements of the same point: where the flow put the
@@ -172,12 +180,17 @@ function directClicks(man, o) {
     }
     const halfW = Math.round(man.width / (2 * o.clickZoom));
     const halfH = Math.round(man.height / (2 * o.clickZoom));
+    // The push happens ON the click. `beatAfter` shifts e.t to after the change
+    // has rendered - which for these flows is 2.4s later, so the camera was
+    // arriving long after the thing that caused it and the zoom read as
+    // unmotivated. The ramp itself is enough delay: by the time the camera is
+    // at depth the page has responded.
     chains.push({
-      startMs: Math.max(0, e.t - o.preLeadMs),
-      endMs: e.t + o.clickHoldMs,
+      startMs: Math.max(0, at - o.preLeadMs),
+      endMs: at + o.clickHoldMs,
       reason: `click: ${e.label || 'element'}`,
       targets: [{
-        tMs: e.t,
+        tMs: at,
         rect: [cx - halfW, cy - halfH, halfW * 2, halfH * 2],
         z: o.clickZoom,
         reason: `click: ${e.label || 'element'}`,

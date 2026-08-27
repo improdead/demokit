@@ -142,13 +142,52 @@ const protectOpen = Number(arg('pull', '1.28')) > 1.001 && openPullMs > 0
 // The opening pull-back is a camera move too. It sat inside the first
 // compressed segment, so a 1.5s reveal played in 0.4s - a jolt before anything
 // had happened, which is exactly what reads as a random zoom.
-const clicks = edlNow && edlNow.chains && edlNow.chains.length
-  ? protectOpen.concat(edlNow.chains.map((c) => ({ fromMs: c.startMs, toMs: c.endMs })))
-  : JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8')).clicks
-      .map((c) => ({ ...c, atMs: c.t }));
+// Protect everything the viewer is meant to WATCH, not just the camera moves.
+//
+// This is what "glitchy" was. A 9.3s stretch holding the pointer gliding across
+// the window and the whole typing run was compressed 3.5x, because the only
+// spans anyone thought to protect were the zooms. The mouse teleports and the
+// letters strobe. Typing had already been slowed to 135ms a character on purpose
+// and then the pace map put it back.
+//
+// Idle means idle: nothing moving, nothing being typed, camera at rest.
+function protectedSpans(man, edl) {
+  const out = [];
+  for (const c of (edl?.chains) || []) out.push({ fromMs: c.startMs, toMs: c.endMs });
+
+  // Typing runs: from the keystroke beat back over the run and past its settle.
+  for (const e of man.events || []) {
+    if (e.kind === 'type') out.push({ fromMs: Math.max(0, e.t - 2600), toMs: e.t + 700 });
+  }
+
+  // Pointer motion: any stretch where the cursor is actually travelling. A
+  // glide is the one moment a viewer's eye is locked to something, and it is
+  // the cheapest thing in the video to get wrong.
+  const pts = (man.pointer && man.pointer.length) ? man.pointer : (man.path || []);
+  let runStart = null, prev = null;
+  for (const q of pts) {
+    if (prev && Math.hypot(q.x - prev.x, q.y - prev.y) > 2 && q.t - prev.t < 400) {
+      if (runStart == null) runStart = prev.t;
+    } else if (runStart != null) {
+      out.push({ fromMs: Math.max(0, runStart - 150), toMs: prev.t + 250 });
+      runStart = null;
+    }
+    prev = q;
+  }
+  if (runStart != null && prev) out.push({ fromMs: Math.max(0, runStart - 150), toMs: prev.t + 250 });
+  return out;
+}
+
+const manNow = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
+const spans = protectedSpans(manNow, edlNow);
+const clicks = spans.length
+  ? protectOpen.concat(spans)
+  : manNow.clicks.map((c) => ({ ...c, atMs: c.t }));
+console.log(`pace: protecting ${spans.length} span(s) - camera moves, typing runs `
+  + `and every stretch where the pointer is moving`);
 const p = await pace({
   input: stage, output: outPath, clicks, workDir: ASSETS,
-  keep: Number(arg('keep', '1.35')), speed: Number(arg('speed', '4')),
+  keep: Number(arg('keep', '0.55')), speed: Number(arg('speed', '4')),
 });
 if (p.skipped) copyFileSync(stage, outPath);
 else console.log(`paced ${p.duration.toFixed(1)}s -> ${(p.duration - p.saved).toFixed(1)}s`);

@@ -255,17 +255,42 @@ function judge(kind, before, after, prove) {
 }
 
 let curX = winX + 40, curY = winY + 40;
+
+/**
+ * Move the pointer along a smooth path, in ONE container round trip.
+ *
+ * It used to issue one `docker exec xdotool mousemove` per step. Each of those
+ * costs ~75ms of process setup, so a 48-step glide took 3.9 SECONDS to cross the
+ * window - the cursor crawled, and then the pace map sped the crawl up 3x, which
+ * is what read as glitchy. xdotool takes a command chain, so the whole path goes
+ * in a single call and the sleeps inside it set the real timing.
+ */
 async function glide(x, y) {
   const d = Math.hypot(x - curX, y - curY);
-  const steps = Math.max(8, Math.min(48, Math.round(d / 28)));
+  if (d < 2) return;
+  // Roughly Fitts: a short hop is quick, a long one is not proportionally
+  // slower. Real pointer moves land in about a third to nine tenths of a second.
+  const durMs = Math.max(300, Math.min(900, Math.round(220 + d * 0.32)));
+  const steps = Math.max(10, Math.min(40, Math.round(d / 26)));
+  const sleep = (durMs / steps / 1000).toFixed(4);
   const x0 = curX, y0 = curY;
+  const pts = [];
   for (let i = 1; i <= steps; i++) {
     const e = smooth(i / steps);
-    const nx = x0 + (x - x0) * e, ny = y0 + (y - y0) * e;
-    await xdo(['mousemove', String(Math.round(nx)), String(Math.round(ny))]);
-    path.push({ x: Math.round(nx - winX), y: Math.round(ny - winY), t: now() });
-    await page.waitForTimeout(14);
+    pts.push([Math.round(x0 + (x - x0) * e), Math.round(y0 + (y - y0) * e)]);
   }
+  const chain = pts.flatMap(([px, py], i) =>
+    (i ? ['sleep', sleep] : []).concat(['mousemove', String(px), String(py)]));
+  const t0 = now();
+  await xdo(chain);
+  // The chain ran inside the container, so the per-step times are not observed.
+  // Distribute the MEASURED elapsed time evenly rather than asserting the
+  // requested one - the difference is what the director would otherwise
+  // mis-anchor on.
+  const elapsed = Math.max(1, now() - t0);
+  pts.forEach(([px, py], i) => {
+    path.push({ x: px - winX, y: py - winY, t: Math.round(t0 + (elapsed * (i + 1)) / pts.length) });
+  });
   curX = x; curY = y;
 }
 
@@ -311,6 +336,11 @@ for (const s of flow.steps) {
     }
     if (s.beat !== false && !s.beatAfter) events.push(ev);
     const tAct = now();
+    // WHEN the camera moves and WHERE it aims are different questions with
+    // different answers. `t` is the beat - after the change has rendered, so the
+    // push does not arrive early. `at` is the click itself, which is the only
+    // moment the pointer is guaranteed to be on the target.
+    ev.at = tAct;
     actions.push({ type: 'click', x: ev.x, y: ev.y, t: tAct, label });
     // The real pointer is already there, so let xdotool deliver the click too -
     // one event, visible and effective, instead of a drawn one and a dispatched
