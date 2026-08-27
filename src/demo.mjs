@@ -128,8 +128,14 @@ console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.zooms} zoo
 // manifest.clicks here protected beats the director had already rejected, and
 // left the real ones exposed - the camera and the cut have to agree.
 const edlNow = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : null;
+const openPullMs = Number(arg('pullms', '1500'));
+const protectOpen = Number(arg('pull', '1.28')) > 1.001 && openPullMs > 0
+  ? [{ fromMs: 0, toMs: openPullMs }] : [];
+// The opening pull-back is a camera move too. It sat inside the first
+// compressed segment, so a 1.5s reveal played in 0.4s - a jolt before anything
+// had happened, which is exactly what reads as a random zoom.
 const clicks = edlNow && edlNow.chains && edlNow.chains.length
-  ? edlNow.chains.flatMap((c) => [{ atMs: c.startMs }, { atMs: c.endMs }])
+  ? protectOpen.concat(edlNow.chains.map((c) => ({ fromMs: c.startMs, toMs: c.endMs })))
   : JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8')).clicks
       .map((c) => ({ ...c, atMs: c.t }));
 const p = await pace({

@@ -20,10 +20,19 @@ const run = promisify(execFile);
  * @param duration seconds
  * @param keep     seconds of normal speed held either side of a click
  */
+/**
+ * @param clicks    [{atMs}] instants to protect, or [{fromMs,toMs}] spans
+ */
 export function planSegments({ clicks, duration, keep = 1.35, speed = 4, minIdle = 0.9, tailHold = 3.5 }) {
   if (!clicks.length) return [{ start: 0, end: duration, speed: 1 }];
+  // A camera move is a SPAN, not two instants. Passing only its endpoints left
+  // the middle unprotected, so a 2.1s stretch inside a held zoom - the pan
+  // between two targets - got sped up 4x and the camera lurched. Nothing
+  // between the start of a move and its end may be compressed.
   const windows = clicks
-    .map((c) => [Math.max(0, c.atMs / 1000 - keep), Math.min(duration, c.atMs / 1000 + keep)])
+    .map((c) => (c.fromMs != null
+      ? [Math.max(0, c.fromMs / 1000 - keep), Math.min(duration, c.toMs / 1000 + keep)]
+      : [Math.max(0, c.atMs / 1000 - keep), Math.min(duration, c.atMs / 1000 + keep)]))
     .sort((a, b) => a[0] - b[0]);
   // The stretch after the LAST beat is the payoff hold, not dead air - resting
   // on the outcome is the point. Speeding it 4x is how a demo ends on a jump
