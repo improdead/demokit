@@ -154,3 +154,31 @@ writeFileSync(join(shotDir, 'pace.json'), JSON.stringify({
 writeFileSync(recipePath, JSON.stringify(recipe, null, 1));
 console.log(`wrote ${outPath}`);
 console.log(`recipe: ${recipePath} (edit a field and re-render; the footage is untouched)`);
+
+// Verify the PRODUCT, not the film - and do it without being asked. A pass that
+// only runs when someone remembers to run it is a pass that reports success by
+// default, which is the failure it exists to prevent.
+if (!process.argv.includes('--no-verify')) {
+  try {
+    const { verify } = await import('./verify.mjs');
+    const v = await verify(shotDir, outPath);
+    if (v.steps && v.steps.length) {
+      console.log(`\nfeature check: ${v.outcome}  `
+        + `(${v.counts.verified} verified, ${v.counts.failed} failed, ${v.counts.inconclusive} unclear)`);
+      for (const st of v.steps) {
+        if (st.verdict === 'verified') continue;
+        console.log(`  ${st.verdict.toUpperCase()}  ${st.atSec}s  ${st.label}`);
+        console.log(`     ${st.why}`);
+        for (const f of st.strips) console.log(`     look: ${f}`);
+      }
+      if (v.outcome !== 'verified') {
+        console.log('  A step that changes nothing is a beat the demo should not have. '
+          + 'Fix the flow, not the framing.');
+      }
+    } else if (v.why) {
+      console.log(`\nfeature check: ${v.outcome} - ${v.why}`);
+    }
+  } catch (e) {
+    console.log('\nfeature check: could not run - ' + String(e.message || e).slice(0, 140));
+  }
+}

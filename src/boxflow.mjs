@@ -98,7 +98,10 @@ if (PREPARE) {
   for (const st of flow.steps) {
     if (!st.sel || st.later) continue;
     const l = st.nth == null ? page.locator(st.sel).first() : page.locator(st.sel).nth(st.nth);
-    const b = await l.boundingBox({ timeout: st.findMs ?? 2500 }).catch(() => null);
+    // Be generous here and nowhere else. Preflight is not on the recorded clock,
+    // and a table that is still fetching its rows is not a broken selector - the
+    // 2.5s budget the RUN uses was rejecting flows that would have worked.
+    const b = await l.boundingBox({ timeout: Math.max(st.findMs ?? 0, 12000) }).catch(() => null);
     if (!b) missing.push(`${st.do} ${st.sel}`);
   }
   if (missing.length && !flow.allowMissing) {
@@ -126,9 +129,130 @@ const smooth = (p) => p * p * p * (10 - 15 * p + 6 * p * p);
 // The container path produced no event stream, so the director had nothing to
 // reason about and every take came back "nothing happens". Record what the flow
 // did, in the same shape record.js emits, and write it beside the frames.
+// A visual sync mark, and the reason for it: the FRAME clock starts when ffmpeg
+// does, this clock starts here - after the CDP connect, the cookie injection,
+// the navigation and the settle - and until now nothing connected the two. The
+// gap is about nine seconds, which meant every camera move in every take fired
+// nine seconds before the thing it was framing. It looked plausible only because
+// the page before a click and the page after it are the same list.
+//
+// An estimate from wall clocks is good to about a second. A flash the capture
+// can SEE is exact to a frame, and screenbox trims it back off.
+await page.evaluate(() => {
+  const d = document.createElement('div');
+  d.id = '__dk_sync__';
+  // Magenta, not white: a page part-way through loading is white, and the first
+  // attempt at this locked onto the navigation flash instead of the mark.
+  // Nothing in a real UI renders a full-viewport #ff00ff.
+  d.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#ff00ff;pointer-events:none';
+  document.documentElement.appendChild(d);
+}).catch(() => {});
 const t0 = Date.now();
 const events = [], path = [], actions = [];
 const now = () => Date.now() - t0;
+await new Promise((r) => setTimeout(r, 240));
+await page.evaluate(() => document.getElementById('__dk_sync__')?.remove()).catch(() => {});
+await new Promise((r) => setTimeout(r, 160));
+
+
+// ---------------------------------------------------------------------------
+// Proof that the feature worked.
+//
+// Everything above this line verifies the CAMERA. None of it can tell you the
+// product did anything: a click that lands on a dead button, a filter that
+// filters nothing, a page that renders the same list it already had - all of it
+// films perfectly. The demo then passes every geometric check and shows nothing.
+//
+// So each step carries its own falsifiable claim, and the state either differs
+// across the action or it does not. This is deliberately cheap and comparable
+// rather than faithful: url, title, a count of visible rows, and a digest of the
+// page's text. Two of those disagreeing is evidence; all four agreeing after a
+// click is the failure nobody catches by watching.
+// ---------------------------------------------------------------------------
+const PROBE = flow.probe || '[role="row"], tbody tr, [data-testid*="row"], li[role="option"]';
+const proof = [];
+
+async function snapshot() {
+  return page.evaluate((sel) => {
+    const onscreen = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 1 && r.height > 1 && r.bottom > 0 && r.top < innerHeight;
+    };
+    let rows = null;
+    try { rows = [...document.querySelectorAll(sel)].filter(onscreen).length; } catch { rows = null; }
+    const text = (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 20000);
+    let digest = 0;
+    for (let i = 0; i < text.length; i++) digest = (digest * 31 + text.charCodeAt(i)) | 0;
+    // Word shingles, not a positional hash. "Something differs" is a useless
+    // answer - a ticking counter differs. What matters is HOW MUCH of the page
+    // is new, and a hash over fixed offsets cannot say, because inserting two
+    // characters at the top shifts every block after it and reports 100%.
+    const words = text.toLowerCase().split(' ').slice(0, 4000);
+    const shingles = [];
+    for (let i = 0; i + 2 < words.length; i++) {
+      const g = words[i] + ' ' + words[i + 1] + ' ' + words[i + 2];
+      let h = 0;
+      for (let j = 0; j < g.length; j++) h = (h * 31 + g.charCodeAt(j)) | 0;
+      shingles.push(h);
+    }
+    return { url: location.href, title: document.title, rows, chars: text.length, digest, text, shingles };
+  }, PROBE).catch(() => null);
+}
+
+const has = (st, t) => String(st.text || '').toLowerCase().includes(String(t).toLowerCase());
+
+/** Compare two snapshots against what the step said it would prove. */
+function judge(kind, before, after, prove) {
+  const out = [];
+  const add = (check, ok, detail) => out.push({ check, ok, detail });
+  if (!before || !after) { add('evidence', null, 'page state could not be read'); return out; }
+  const p = prove || {};
+  const A = new Set(before.shingles || []), B = new Set(after.shingles || []);
+  let inter = 0;
+  for (const h of B) if (A.has(h)) inter++;
+  const union = A.size + B.size - inter;
+  // Share of the page's content that is NOT common to both states.
+  const novel = union ? 1 - inter / union : (before.digest === after.digest ? 0 : 1);
+  const navigated = before.url !== after.url;
+  const listMoved = before.rows != null && after.rows != null && before.rows !== after.rows;
+  const min = p.minChange ?? 0.08;
+  const substantive = navigated || listMoved || novel >= min;
+
+  // The default assertion, and the one that catches the failure everybody ships.
+  // Note what it does NOT accept: "some bytes differ". A counter ticking over is
+  // a difference and proves nothing - the first take through this pass came back
+  // with a filter click that moved 2 characters out of 13,379 and would have
+  // passed a plain inequality. The question is whether a VIEWER would see it.
+  // Hover is exempt: its effect is a shadow or a tint, which lives in the pixels
+  // and not in the text - verify.mjs judges that one from the frames.
+  if (p.changes !== false && (kind === 'click' || kind === 'type')) {
+    const how = `${(novel * 100).toFixed(1)}% of the page content is new`
+      + `, rows ${before.rows}->${after.rows}, url ${navigated ? 'changed' : 'same'}`;
+    add('the step visibly changed the product', substantive, substantive ? how
+      : `${how} - below ${(min * 100).toFixed(0)}%, so nothing a viewer would notice happened here`);
+  }
+  // A row probe that matched nothing is not a failed feature, it is a failed
+  // measurement. Saying "narrowed: no" because the selector was wrong is the
+  // same lie as saying "fine" because nothing was checked.
+  const counted = before.rows != null && after.rows != null;
+  if (p.rowsDrop) add('the list narrowed', counted ? after.rows < before.rows : null,
+    counted ? `${before.rows} -> ${after.rows} visible rows` : 'the row probe matched nothing - set "probe" in the flow');
+  if (p.rowsRise) add('the list grew', counted ? after.rows > before.rows : null,
+    counted ? `${before.rows} -> ${after.rows} visible rows` : 'the row probe matched nothing - set "probe" in the flow');
+  if (p.urlChanges) add('it navigated', before.url !== after.url,
+    before.url === after.url ? `still ${after.url}` : `-> ${after.url}`);
+  for (const t of [].concat(p.textAppears || [])) {
+    const was = has(before, t), is = has(after, t);
+    add(`"${t}" appears`, is && !was,
+      !is ? 'never appeared' : (was ? 'it was already on screen before the step - this proves nothing' : 'on screen now'));
+  }
+  for (const t of [].concat(p.textGone || [])) {
+    const was = has(before, t), is = has(after, t);
+    add(`"${t}" is gone`, was && !is,
+      !was ? 'it was not there to begin with - this proves nothing' : (is ? 'still on screen' : 'cleared'));
+  }
+  return out;
+}
 
 let curX = winX + 40, curY = winY + 40;
 async function glide(x, y) {
@@ -152,8 +276,17 @@ for (const s of flow.steps) {
     if (!s.sel) continue;
     const loc = s.nth == null ? page.locator(s.sel).first() : page.locator(s.sel).nth(s.nth);
     const b = await loc.boundingBox({ timeout: s.findMs ?? 2500 }).catch(() => null);
-    if (!b) { console.log(`STEP SKIPPED (${label}): ${s.sel} matched nothing`); continue; }
+    if (!b) {
+      console.log(`STEP SKIPPED (${label}): ${s.sel} matched nothing`);
+      // A step that never ran must not vanish. Silence here is what let a video
+      // come back from three-fifths of a flow looking complete.
+      proof.push({ label, kind: s.do, tMs: now(), afterMs: now(), region: null,
+        shows: s.shows || null, prove: s.prove || null, before: null, after: null,
+        checks: [{ check: 'the step ran', ok: false, detail: `${s.sel} matched nothing - it was never performed` }] });
+      continue;
+    }
     const [sx, sy] = toScreen(b.x + b.width / 2, b.y + b.height / 2);
+    const before = await snapshot();
     await glide(sx, sy);
     await page.waitForTimeout(s.settleMs ?? 380);
     // Coordinates are stored relative to the captured WINDOW, because that is
@@ -167,11 +300,18 @@ for (const s of flow.steps) {
     };
     if (s.do === 'hover' || s.do === 'move') {
       if (s.beat !== false) events.push(ev);
+      const tAct = now();
       await page.waitForTimeout(s.ms ?? 900);
+      const afterH = await snapshot();
+      proof.push({ label, kind: 'hover', tMs: tAct, afterMs: now(),
+        region: [ev.bx, ev.by, ev.w, ev.h], shows: s.shows || null,
+        prove: s.prove || null, before, after: afterH,
+        checks: judge('hover', before, afterH, s.prove) });
       continue;
     }
     if (s.beat !== false && !s.beatAfter) events.push(ev);
-    actions.push({ type: 'click', x: ev.x, y: ev.y, t: now(), label });
+    const tAct = now();
+    actions.push({ type: 'click', x: ev.x, y: ev.y, t: tAct, label });
     // The real pointer is already there, so let xdotool deliver the click too -
     // one event, visible and effective, instead of a drawn one and a dispatched
     // one that have to be trusted to agree.
@@ -187,17 +327,28 @@ for (const s of flow.steps) {
       if (nb) {
         ev.x = Math.round(toScreen(nb.x + nb.width / 2, nb.y + nb.height / 2)[0] - winX);
         ev.y = Math.round(toScreen(nb.x + nb.width / 2, nb.y + nb.height / 2)[1] - winY);
-        ev.w = Math.round(nb.width); ev.h = Math.round(nb.height);
-        ev.bx = Math.round(nb.x + chromeX); ev.by = Math.round(nb.y + chromeY);
+        ev.w = Math.round(nb.width * DSF); ev.h = Math.round(nb.height * DSF);
+        ev.bx = Math.round(nb.x * DSF + chromeX); ev.by = Math.round(nb.y * DSF + chromeY);
       }
       ev.t = now();
       events.push(ev);
     }
+    let expect = null;
     if (s.expect) {
       const t = s.expect.sel || s.expect;
       const ok = await page.locator(t).first().waitFor({ state: 'visible', timeout: s.expect.timeout ?? 8000 })
         .then(() => true).catch(() => false);
+      expect = { sel: t, ok };
       console.log(ok ? `expect ok: ${t}` : `EXPECT FAILED after "${label}": ${t}`);
+    }
+    const after = await snapshot();
+    const checks = judge(s.do === 'type' ? 'type' : 'click', before, after, s.prove);
+    proof.push({ label, kind: s.do === 'type' ? 'type' : 'click', tMs: tAct, afterMs: now(),
+      region: [ev.bx, ev.by, ev.w, ev.h], shows: s.shows || null,
+      prove: s.prove || null, expect, before, after, checks });
+    for (const c of checks) {
+      if (c.ok === false) console.log(`PROOF FAILED (${label}): ${c.check} - ${c.detail}`);
+      else if (c.ok === null) console.log(`PROOF INCONCLUSIVE (${label}): ${c.detail}`);
     }
   } catch (e) {
     console.log(`step failed (${label}): ${String(e.message || e).slice(0, 120)}`);
@@ -206,7 +357,13 @@ for (const s of flow.steps) {
 await page.waitForTimeout(flow.tailMs ?? 2000);
 const out = process.env.DEMOKIT_EVENTS;
 if (out) {
-  writeFileSync(out, JSON.stringify({ events, path, actions, endMs: now() }));
+  const trim = (st) => (st ? { ...st, text: String(st.text || '').slice(0, 900), shingles: undefined } : null);
+  const slim = proof.map((p) => ({ ...p, before: trim(p.before), after: trim(p.after) }));
+  writeFileSync(out, JSON.stringify({ events, path, actions, proof: slim,
+    startedAt: t0, endedAt: Date.now(), endMs: now() }));
+  const bad = slim.flatMap((p) => p.checks.filter((c) => c.ok === false)).length;
+  console.log(bad ? `boxflow: ${bad} PROOF FAILURE(S) - the video will show a feature that did not work`
+                  : `boxflow: every step changed the page it claimed to change`);
   console.log(`boxflow: ${events.length} event(s), ${path.length} pointer samples -> ${out}`);
 }
 await browser.close().catch(() => {});

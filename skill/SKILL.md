@@ -349,6 +349,31 @@ Non-obvious fields, all of which exist because a take was wasted without them:
 Take selectors from the probe's `sel` fields — they are already ranked by stability
 (id → data-testid → aria-label → text → class).
 
+### Every step declares what it proves
+
+A step without a falsifiable claim cannot be verified, only watched. Give each
+one a `prove` block and a one-line `shows`:
+
+```json
+{ "do": "type", "sel": "[aria-label*=\"Search\"]", "text": "corvel",
+  "label": "narrow to one asset",
+  "shows": "one asset, and the list collapses to a handful",
+  "prove": { "rowsDrop": true } }
+```
+
+| key | asserts |
+|---|---|
+| *(default)* | a click or type must visibly change the product — ≥8% of page content, or rows/url move |
+| `minChange` | override that 8% for a step that legitimately changes little |
+| `changes: false` | this step is not supposed to change anything (say why in `shows`) |
+| `rowsDrop` / `rowsRise` | the visible row count moved in that direction |
+| `urlChanges` | it navigated |
+| `textAppears` / `textGone` | a string crossed onto or off the screen — and was **not** already there |
+
+Set `probe` at the flow level to whatever a row is in this app; a probe that
+matches nothing reports `inconclusive`, never `false`. A failed measurement and
+a failed feature are different answers.
+
 ## 8. Capture — and read the log as evidence
 
 ```bash
@@ -360,10 +385,23 @@ destroy the first one's frames. Budget roughly **6MB of PNG per second** of capt
 
 **The process exits 0 even when the take is worthless. The exit code is not evidence.**
 
+**Two clocks, and they must be tied together.** Frames are timestamped from when
+the recorder started; events are timestamped from when the flow began — after the
+CDP connect, the cookie injection, the navigation and the settle. That gap is
+about nine seconds, and for a long time nothing connected the two: every camera
+move fired nine seconds before the thing it framed. It looked plausible for the
+worst possible reason — the page before a click and the page after it are the
+same list. The flow now paints a full-viewport magenta mark at its own zero and
+the capture finds it, exact to a frame. (Magenta, not white: a page mid-navigation
+is white, and the first attempt locked onto the page load instead of the mark.)
+Everything before the mark is dead pre-roll and gets trimmed.
+
 | In the log | Means | Do |
 | --- | --- | --- |
 | `PREFLIGHT FAILED` | selectors matched nothing at t=0 | diagnose below — do not reach for `allowMissing` |
 | `EXPECT FAILED` | the thing you are demoing did not happen | abandon the take |
+| `PROOF FAILED` | the step ran and the product did not visibly respond (§9) | fix the flow — it is a dead beat, not a framing problem |
+| `NO SYNC FLASH FOUND` | the event clock could not be tied to the frame clock; camera timing is an estimate | re-record; if it persists the mark is being covered or the capture dropped its first seconds |
 | `NOTE: <sel> is covered` | something overlaps your target; the click may have gone to it | `hide` it, re-record |
 | `step failed`, `WARNING: drag did not move it` | abandon the take |
 | `beats=N` lower than the beats you wrote | a step was silently skipped | abandon the take |
@@ -410,7 +448,65 @@ On a browser take, add it to the click beats with `--beats augment`, or turn it
 off with `--beats off`. It deliberately finds fewer beats than clicks does on a
 browser take, because a hover changes nothing on screen — which is the point.
 
-## 9. Verify — objective checks, not "look at it"
+## 9. Verify — first that the FEATURE worked, then that the film is good
+
+Every check in this section used to be about the video. None of them can catch
+the failure that matters most: a take that is framed perfectly on a product
+doing nothing. A click that lands on a dead control, a filter that filters
+nothing, a detail view that was already open — all of it films beautifully and
+passes every geometric assertion. That demo is worthless and nothing here
+noticed, because everything here was measuring the film.
+
+So the first question is not "does this look right", it is **did the product
+do the thing**. Answer it three ways and require agreement:
+
+| evidence | what it can prove | how it lies |
+|---|---|---|
+| **DOM** | the app's state before and after differ, and by how much | a counter ticks over and calls it a change; changes without rendering |
+| **source pixels** | something visibly moved, and *where* | a spinner spun; a caret blinked |
+| **delivered cut** | the viewer sees the before and the after | a moving camera makes every step look eventful |
+
+Each is wrong in a different direction, which is exactly why all three run.
+
+```bash
+bin/demokit verify .cache/shot-<name> out/demo.mp4
+```
+
+It runs automatically at the end of every build. Do not skip it, and do not
+treat a missing result as a pass — the outcomes are `verified`, `failed` and
+`inconclusive`, and the third is a real answer meaning *the gate could not run*.
+Collapsing it into "fine" is how a broken demo ships.
+
+**The measurements, and why they are shaped this way:**
+
+- **"Something differs" is not evidence.** The first take through this pass had a
+  filter click that changed 2 characters out of 13,379 and passed a plain
+  inequality. What matters is the share of the page that is new — word shingles,
+  not a positional hash, because inserting two characters at the top shifts every
+  block after it and reports 100%. Below 8%, nothing a viewer would notice
+  happened.
+- **Measure where it changed, not where you clicked.** A filter chip changes the
+  *list*; a search box changes the rows below it. So take the bounding box of the
+  pixels that actually differ. The evidence strips draw both: red for what was
+  clicked, green for what moved. If there is no green box, the beat is dead.
+- **Sample the delivered cut where the camera is at rest.** A version of this
+  compared frames across the zoom and reported "the viewer sees it happen" for a
+  step whose product change was 1% of the page — the 53-point difference it
+  measured was the push, not the feature.
+- **A skipped step must not vanish.** Silence is what let a video come back from
+  three-fifths of a flow looking complete.
+
+**Then think, because none of the numbers can:**
+
+1. Does the sequence of after-states tell the story the claim makes, or only touch its parts?
+2. Is there a step whose evidence is real but whose payoff is off-screen or never opened?
+3. Which step would a sceptic say proves nothing, and are they right?
+4. If a step is inconclusive, what would have to be recorded to settle it?
+
+**A failed step is a flow problem. Never fix it at the framing layer.** A beat
+that changes nothing should not be in the demo; do not zoom harder at it.
+
+## 9a. Then the film — objective checks, not "look at it"
 
 Extract frame 0, 0.8s, every `clicks[].t` from `.cache/shot/manifest.json`, and the last frame:
 

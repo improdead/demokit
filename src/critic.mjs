@@ -25,6 +25,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { verify } from './verify.mjs';
 
 const run = promisify(execFile);
 
@@ -161,12 +162,27 @@ sheet.save(${JSON.stringify(sheet)})`;
   await run('python3', ['-c', py], { maxBuffer: 1 << 26 });
 
   const inv = invariants(edl, man, recipe);
+
+  // The camera passing is not the demo passing. A take can be framed perfectly
+  // on a feature that did nothing, so the functional verdict is folded in here
+  // and it can only ever make the outcome worse, never better.
+  let feature = null;
+  try { feature = await verify(shotDir, mp4); }
+  catch (e) { feature = { outcome: 'inconclusive', why: 'verify pass failed: ' + String(e.message || e), steps: [] }; }
+
+  const outcome = (inv.length || feature.outcome === 'failed') ? 'failed'
+    : feature.outcome === 'inconclusive' ? 'inconclusive' : 'pending-vision';
+
   const pack = {
     video: mp4, durationSec: dur, sheet,
     claim: edl.claim || null,
     shots: shots.map(({ t, what, expect, file }) => ({ t: +t.toFixed(2), what, expect, file })),
     invariants: inv.length ? inv : [{ ok: true, check: 'all', detail: 'no geometric problems' }],
-    outcome: inv.length ? 'failed' : 'pending-vision',
+    feature: { outcome: feature.outcome, counts: feature.counts || null,
+      steps: (feature.steps || []).map((s) => ({ at: s.atSec, label: s.label, verdict: s.verdict, why: s.why })),
+      strips: (feature.steps || []).flatMap((s) => s.strips || []) },
+    think: feature.think || [],
+    outcome,
   };
   writeFileSync(join(shotDir, 'critic.json'), JSON.stringify(pack, null, 1));
   return pack;
@@ -233,11 +249,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  ${String(i).padStart(2)}  ${String(s.t).padStart(6)}s  ${s.what}`);
     console.log(`      expect: ${s.expect}`);
   }
-  console.log('\n  invariants:');
+  console.log('\n  invariants (the camera):');
   for (const v of pack.invariants) {
     console.log(`    ${v.ok ? 'PASS' : 'FAIL'}  ${v.check}${v.at != null ? ` @${(v.at / 1000).toFixed(1)}s` : ''}  ${v.detail}`);
   }
+  console.log(`\n  feature (the product): ${pack.feature.outcome}`);
+  for (const s of pack.feature.steps) {
+    console.log(`    ${s.verdict.toUpperCase().padEnd(12)} ${String(s.at).padStart(6)}s  ${s.label}`);
+    console.log(`                 ${s.why}`);
+  }
+  for (const f of pack.feature.strips) console.log(`    look: ${f}`);
   console.log(`\n  outcome: ${pack.outcome}`);
+  if (pack.think.length) {
+    console.log('  the checks above cannot answer these, and they are the ones that matter:');
+    for (const q of pack.think) console.log('    - ' + q);
+  }
   console.log('  If the frames contradict what they should show, write a patch and apply it:');
   console.log('    {"dropZooms":[12800], "setRect":[{"tMs":20600,"rect":[x,y,w,h]}], "recipe":{"inset":"0.8"}}');
   process.exit(pack.outcome === 'failed' ? 2 : 0);

@@ -14,7 +14,7 @@
   ],
   "zoom": 1,
   "clearStorage": false,
-  "settleMs": 5000,
+  "settleMs": 7000,
   "tailMs": 2600,
   "steps": [
     {
@@ -26,7 +26,9 @@
       "sel": "button:has-text(\"Critical\")",
       "label": "filter to critical",
       "ms": 2400,
-      "beatAfter": true
+      "beatAfter": true,
+      "shows": "the backlog is filtered to criticals only",
+      "prove": {}
     },
     {
       "do": "type",
@@ -34,7 +36,12 @@
       "text": "corvel",
       "label": "narrow to one asset",
       "ms": 2200,
-      "beatAfter": true
+      "beatAfter": true,
+      "shows": "one asset, and the list collapses to a handful",
+      "prove": {
+        "rowsDrop": true
+      },
+      "findMs": 8000
     },
     {
       "do": "click",
@@ -45,14 +52,23 @@
       "expect": {
         "sel": "text=Technical Analysis",
         "timeout": 15000
-      }
+      },
+      "shows": "the finding opens with its analysis, not just its title",
+      "prove": {
+        "textAppears": [
+          "Technical Analysis"
+        ]
+      },
+      "findMs": 15000
     },
     {
       "do": "hover",
       "sel": "button:has-text(\"Fix in agent\")",
       "later": true,
       "label": "hand it to the agent",
-      "ms": 3600
+      "ms": 3600,
+      "shows": "the fix is one action away"
     }
-  ]
+  ],
+  "probe": "[role=\"row\"], tbody tr, a[href*=\"/findings/\"]"
 }

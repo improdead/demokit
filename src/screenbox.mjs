@@ -239,18 +239,82 @@ while True:
     await run(bin, ['cp', `${name}:/tmp/f/.`, join(shotDir, 'frames')]);
 
     const files = readdirSync(join(shotDir, 'frames')).filter((f) => f.endsWith('.png')).sort();
-    const frames = files.map((f, i) => ({ i: Number(f.slice(1, 6)), ms: Math.round((i * 1000) / fps) }));
+    let frames = files.map((f, i) => ({ i: Number(f.slice(1, 6)), ms: Math.round((i * 1000) / fps) }));
+
+    // Find boxflow's sync flash and put both clocks on the same origin.
+    //
+    // One ffmpeg pass over the PNGs, cropped to the lower half so the browser's
+    // own chrome cannot dilute a white viewport, scaled to 16x9 greys. 144 bytes
+    // a frame, decoded in C, and it answers the only question that matters here:
+    // which frame is the one boxflow called zero.
+    let flashIdx = -1, flashEnd = -1;
+    try {
+      const { stdout: raw } = await run('ffmpeg', ['-loglevel', 'error',
+        '-framerate', String(fps), '-start_number', String(frames[0].i),
+        '-i', join(shotDir, 'frames', 'f%05d.png'),
+        '-vf', 'crop=iw:ih/2:0:ih/2,scale=16:9,format=rgb24', '-f', 'rawvideo', '-'],
+        { maxBuffer: 1 << 26, encoding: 'buffer' });
+      const px = 16 * 9, per = px * 3;
+      const magenta = [];
+      for (let k = 0; k + per <= raw.length; k += per) {
+        let r = 0, g = 0, b = 0;
+        for (let j = 0; j < per; j += 3) { r += raw[k + j]; g += raw[k + j + 1]; b += raw[k + j + 2]; }
+        magenta.push(r / px > 200 && b / px > 200 && g / px < 90);
+      }
+      // Brightness alone cannot find this: the app is light-themed and a page
+      // mid-navigation is white, which is a bigger jump than the mark itself was.
+      for (let k = 0; k < magenta.length && k < fps * 45; k++) {
+        if (magenta[k]) { flashIdx = k; break; }
+      }
+      if (flashIdx >= 0) {
+        flashEnd = flashIdx;
+        while (flashEnd + 1 < magenta.length && magenta[flashEnd + 1]) flashEnd++;
+      }
+    } catch (e) {
+      console.log('screenbox: sync scan failed: ' + String(e.message || e).slice(0, 100));
+    }
+
+    let shift = 0;   // ms to add to every event time to reach frame time
+    let evt = existsSync(join(shotDir, 'boxevents.json'))
+      ? JSON.parse(readFileSync(join(shotDir, 'boxevents.json'), 'utf8')) : null;
+    if (flashIdx >= 0 && evt) {
+      const flashMs = frames[flashIdx].ms;
+      // Cut everything up to and including the flash: it is a white frame, and
+      // behind it sits ~9s of a page sitting still while cookies and navigation
+      // happen. Nobody wants that as an opening shot.
+      // Keep from just past the mark's LAST frame, measured rather than assumed:
+      // a fixed offset leaves a magenta frame in the opening shot if the paint
+      // lagged.
+      const keepFrom = Math.max(flashEnd + 2, flashIdx + Math.round(fps * 0.32));
+      const base = frames[Math.min(keepFrom, frames.length - 1)].ms;
+      frames = frames.slice(Math.min(keepFrom, frames.length - 1)).map((f) => ({ i: f.i, ms: f.ms - base }));
+      shift = flashMs - base;   // negative: the flash sits before the new zero
+      console.log(`screenbox: sync flash at frame ${flashIdx} (${(flashMs / 1000).toFixed(2)}s); `
+        + `trimmed ${(base / 1000).toFixed(2)}s of pre-roll, events shifted ${shift}ms`);
+    } else if (evt) {
+      // No flash: fall back to aligning the tails, and SAY it is an estimate.
+      // A silent guess here is a camera that fires seconds off and looks fine.
+      shift = frames.length ? frames.at(-1).ms - (evt.endMs || 0) : 0;
+      console.log(`screenbox: NO SYNC FLASH FOUND - falling back to a tail-aligned estimate `
+        + `(${shift}ms). Camera timing is approximate for this take.`);
+    }
+    if (evt && shift) {
+      const bump = (t) => Math.max(0, Math.round(t + shift));
+      for (const e of evt.events || []) e.t = bump(e.t);
+      for (const a of evt.actions || []) a.t = bump(a.t);
+      for (const q of evt.path || []) q.t = bump(q.t);
+      for (const pr of evt.proof || []) { pr.tMs = bump(pr.tMs); pr.afterMs = bump(pr.afterMs); }
+      evt.endMs = bump(evt.endMs || 0);
+    }
     writeFileSync(join(shotDir, 'manifest.json'), JSON.stringify({
       width: geom.w, height: geom.h, layout: [geom.w, geom.h], zoom: 1, dsf: 1,
       source: 'screenbox',
       endMs: frames.length ? frames.at(-1).ms : 0,
-      ...(existsSync(join(shotDir, 'boxevents.json'))
-        ? (() => {
-            const e = JSON.parse(readFileSync(join(shotDir, 'boxevents.json'), 'utf8'));
-            // path stays empty on purpose: the cursor is REAL in these frames,
-            // so cursor.py must not draw a second one over it.
-            return { frames, events: e.events, clicks: e.events, actions: e.actions, path: [] };
-          })()
+      // path stays empty on purpose: the cursor is REAL in these frames, so
+      // cursor.py must not draw a second one over it.
+      ...(evt
+        ? { frames, events: evt.events, clicks: evt.events, actions: evt.actions,
+            proof: evt.proof || [], path: [], sync: { flashIdx, shift } }
         : { frames, clicks: [], path: [], actions: [] }),
     }, null, 1));
     return { frames: frames.length, width: geom.w, height: geom.h };
