@@ -14,6 +14,12 @@ Works on three sources, all through the same pipeline:
 | a CLI or a script | `bin/demokit term "<shell command>" out.mp4` |
 | a native app or the desktop | `bin/demokit screen out.mp4 --seconds 30` |
 
+For anything behind a login, `box` needs the session carried in — it starts with
+an empty profile. Export the cookies from a browser that is already signed in and
+point `DEMOKIT_COOKIES` at the file; they are injected over CDP before the first
+navigation, so no password is ever handled and nothing is written outside the
+gitignored `.cache`.
+
 `box` is the best of the three when Docker is available: Chromium inside a
 container with Xvfb and a window manager, so the pointer is a **real X11 cursor**
 moved by xdotool and the chrome is a **real browser window** — nothing is drawn,

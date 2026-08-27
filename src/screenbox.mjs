@@ -200,12 +200,23 @@ while True:
     // same coordinates, so the cursor on screen and the click that lands are
     // one event instead of two that agree by luck.
     console.log('screenbox: driving the flow over CDP at localhost:9223');
-    await run('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
+    // execFile CAPTURES output even with stdio:'inherit', so boxflow's log -
+    // which is the only place a skipped step or a failed expect is reported -
+    // was being swallowed. spawn actually inherits.
+    await new Promise((res) => {
+      const p = spawn('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
+        String(geom.x), String(geom.y)], { stdio: 'inherit',
+        env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '',
+               DEMOKIT_COOKIES: process.env.DEMOKIT_COOKIES || '',
+               DEMOKIT_EVENTS: join(shotDir, 'boxevents.json') } });
+      p.on('exit', () => res());
+      p.on('error', (e) => { console.error('screenbox: flow failed: ' + e.message); res(); });
+    });
+    await Promise.resolve({ _unused: [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
       String(geom.x), String(geom.y)],
-      { maxBuffer: 1 << 26, stdio: 'inherit',
-        env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '' } }).catch((e) => {
-        console.error('screenbox: flow failed: ' + String(e.message || e).slice(0, 200));
-      });
+      _o: { maxBuffer: 1 << 26,
+        env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '',
+               DEMOKIT_COOKIES: process.env.DEMOKIT_COOKIES || '' } } });
 
     await dexec(bin, name, ['bash', '-c', 'pkill -INT ffmpeg; sleep 1.5']);
     await dexec(bin, name, ['bash', '-c',
@@ -218,7 +229,14 @@ while True:
       width: geom.w, height: geom.h, layout: [geom.w, geom.h], zoom: 1, dsf: 1,
       source: 'screenbox',
       endMs: frames.length ? frames.at(-1).ms : 0,
-      frames, clicks: [], path: [], actions: [],   // real cursor is in the pixels
+      ...(existsSync(join(shotDir, 'boxevents.json'))
+        ? (() => {
+            const e = JSON.parse(readFileSync(join(shotDir, 'boxevents.json'), 'utf8'));
+            // path stays empty on purpose: the cursor is REAL in these frames,
+            // so cursor.py must not draw a second one over it.
+            return { frames, events: e.events, clicks: e.events, actions: e.actions, path: [] };
+          })()
+        : { frames, clicks: [], path: [], actions: [] }),
     }, null, 1));
     return { frames: frames.length, width: geom.w, height: geom.h };
   } finally {
