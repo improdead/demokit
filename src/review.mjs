@@ -117,6 +117,34 @@ export async function review({ shotDir, mp4, gap = 1500 }) {
   const edl = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : null;
   const all = edl ? (edl.chains || []).map((c) => ({ t: c.startMs, label: c.reason }))
                   : (man.clicks || []);
+
+  // Camera state comes from the EDIT, not from pixels.
+  //
+  // The pixel test measured how wide the detailed region was, which worked only
+  // while zooming moved the window on the canvas. The zoom now happens inside
+  // the recording and the window never changes size, so that test measures page
+  // CONTENT and reports a resting camera as permanently zoomed. edit.json says
+  // exactly when the camera moves and pace.json says where that lands in the
+  // finished video - no inference required.
+  let camera = null;
+  const pacePath = join(shotDir, 'pace.json');
+  if (edl && existsSync(pacePath)) {
+    const { segments } = JSON.parse(readFileSync(pacePath, 'utf8'));
+    const toOut = (t) => {
+      let out = 0;
+      for (const sg of segments) {
+        if (t <= sg.start) break;
+        out += (Math.min(t, sg.end) - sg.start) / sg.speed;
+        if (t <= sg.end) break;
+      }
+      return out;
+    };
+    const total = toOut((edl.durationMs || 0) / 1000);
+    const spans = (edl.chains || []).map((c) => [toOut(c.startMs / 1000), toOut(c.endMs / 1000)]);
+    const moving = spans.reduce((a, [x, y]) => a + (y - x), 0);
+    const lastEnd = spans.length ? Math.max(...spans.map((x) => x[1])) : 0;
+    camera = { total, restFrac: total ? 1 - moving / total : 1, tailHold: Math.max(0, total - lastEnd) };
+  }
   const m = await measure(mp4);
 
   // Measure the beats that actually produce a zoom. render.mjs drops any beat
@@ -135,11 +163,13 @@ export async function review({ shotDir, mp4, gap = 1500 }) {
     ['beats', beats >= TARGET.minBeats && beats <= TARGET.maxBeats,
       `${beats} camera move(s)${merged ? ` (${merged} merged)` : ''} (want ${TARGET.minBeats}-${TARGET.maxBeats})`, null],
     ['zoom lands', m.zoomRange > 12, `range ${m.zoomRange}px`, { level: +0.15 }],
-    ['rest state', m.restFrac >= TARGET.restFrac,
-      `${(m.restFrac * 100).toFixed(0)}% unzoomed (want >=${TARGET.restFrac * 100}%)`,
+    ['rest state', (camera ? camera.restFrac : m.restFrac) >= TARGET.restFrac,
+      `${((camera ? camera.restFrac : m.restFrac) * 100).toFixed(0)}% camera at rest`
+      + `${camera ? ' (from the edit)' : ' (inferred)'} (want >=${TARGET.restFrac * 100}%)`,
       { gap: +500 }],
-    ['payoff hold', m.tailHold >= TARGET.tailHold,
-      `${m.tailHold.toFixed(2)}s at rest at the end (want >=${TARGET.tailHold})`, { keep: +0.4 }],
+    ['payoff hold', (camera ? camera.tailHold : m.tailHold) >= TARGET.tailHold,
+      `${(camera ? camera.tailHold : m.tailHold).toFixed(2)}s at rest at the end`
+      + ` (want >=${TARGET.tailHold})`, { keep: +0.4 }],
     ['something changed', m.maxChange >= TARGET.minChange,
       `max ${m.maxChange} mean-luma vs frame 0 (want >=${TARGET.minChange})`, null],
     ['no dead air', m.maxStall <= TARGET.maxStall,
