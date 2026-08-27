@@ -285,11 +285,19 @@ export function buildGraph({
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
   minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500, edl = null, panMs = 420,
 }) {
+  let ZOOMCHAIN = 'null';
   const parts = [];
   // Cursor and click pulses are already composited into the frames by
   // src/cursor.py - it interpolates the dense pointer path per frame, which an
   // ffmpeg overlay expression cannot do without encoding hundreds of samples.
   parts.push(`[0:v]fps=${fps}[withcur]`);
+  // The zoom happens INSIDE the recording, before it is inset onto the
+  // backdrop. Zooming the whole composite instead let the crop wander off the
+  // window and clamp against the canvas edge, so a peak framed a third of
+  // wallpaper with the window sliced off - and no amount of clamping fixes
+  // that, because the crop was never constrained to the content in the first
+  // place. Zoom the footage, then frame it: the window cannot move.
+  parts.push(`[withcur]__ZOOMCHAIN__[zoomed]`);
 
   // ---- frame composite (at capture resolution) -----------------------------
   //
@@ -315,11 +323,11 @@ export function buildGraph({
     // because zoompan crops from this canvas at composite resolution.
     parts.push(
       `[${B}:v]scale=${compW}:${compH}:flags=lanczos,setsar=1[bg]`,
-      `[withcur]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
+      `[zoomed]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
   } else {
     // Legacy: blur the recording behind itself. Kept for --bg blur.
     parts.push(
-      `[withcur]split=2[fga_src][bg_src]`,
+      `[zoomed]split=2[fga_src][bg_src]`,
       `[bg_src]scale=${compW}:${compH}:force_original_aspect_ratio=increase,crop=${compW}:${compH},` +
         `gblur=sigma=${Math.round(blurSigma * (compW / 1920))},eq=brightness=-${bgDim}:saturation=${bgSat}[bg]`,
       `[fga_src]scale=${fgW}:${fgH}:flags=lanczos[fgs]`);
@@ -344,39 +352,39 @@ export function buildGraph({
   }));
   if (!zooms.length) {
     parts.push(`[flat]scale=${outW}:${outH}:flags=lanczos[out]`);
-    return parts.join(';');
+    return parts.join(';').replace('__ZOOMCHAIN__', 'null');
   }
 
-  const sx = fgW / srcW, sy = fgH / srcH;
+  // Source space: no inset offset, no canvas. The crop simply cannot leave the
+  // recording, which is the whole point of doing this first.
+  // ox/oy from the composite are irrelevant here: the crop is in source space.
+  const sx = 1, sy = 1, zOx = 0, zOy = 0;
+  const zW = srcW, zH = srcH;
   const tv = `(in/${fps})`;
 
   /** Solve the crop that CONTAINS a rect. Exact, rather than a depth guess
    *  aimed at a coordinate - which could not be accurate even in principle. */
   const solve = (zm) => {
     const pad = zm.padFrac ?? 0.55;
-    const rx = ox + zm.rect[0] * sx, ry = oy + zm.rect[1] * sy;
+    const rx = zOx + zm.rect[0] * sx, ry = zOy + zm.rect[1] * sy;
     const rw = zm.rect[2] * sx, rh = zm.rect[3] * sy;
     const cw = rw * (1 + 2 * pad), chh = rh * (1 + 2 * pad);
-    let z = Math.min(compW / Math.max(1, cw), compH / Math.max(1, chh));
+    let z = Math.min(zW / Math.max(1, cw), zH / Math.max(1, chh));
     // A zoom must be deep enough that the crop fits INSIDE the window. Below
     // that the crop is physically wider than the window, so it has to include
     // backdrop and the window edge slices through frame - which is what makes a
     // shallow push look broken rather than subtle. With inset 0.76 the window
     // is 2641px of a 3840 canvas, so anything under ~1.45x cannot be clean.
-    const fillZ = Math.max(compW / fgW, compH / fgH);
-    z = Math.max(fillZ, Math.min(Math.max(maxLevel, fillZ), z));
+    z = Math.max(1.0, Math.min(maxLevel, z));
 
     // Keep the crop INSIDE the window. Clamping only to the canvas lets the
     // frame straddle the window edge, so you get a slice of UI and a slice of
     // backdrop with the window sliced through the middle - which reads as
     // broken, not as a zoom. A real screen recording never shows that: when it
     // pushes in, it is inside the content.
-    const halfW = compW / (2 * z), halfH = compH / (2 * z);
-    let cx = rx + rw / 2, cy = ry + rh / 2;
-    if (halfW * 2 <= fgW) cx = Math.max(ox + halfW, Math.min(ox + fgW - halfW, cx));
-    else cx = Math.max(halfW, Math.min(compW - halfW, cx));
-    if (halfH * 2 <= fgH) cy = Math.max(oy + halfH, Math.min(oy + fgH - halfH, cy));
-    else cy = Math.max(halfH, Math.min(compH - halfH, cy));
+    const halfW = zW / (2 * z), halfH = zH / (2 * z);
+    const cx = Math.max(halfW, Math.min(zW - halfW, rx + rw / 2));
+    const cy = Math.max(halfH, Math.min(zH - halfH, ry + rh / 2));
     return { z, cx, cy };
   };
 
@@ -414,8 +422,8 @@ export function buildGraph({
   /** Piecewise eased pan between the targets of one move. */
   const panExpr = (mv, key) => {
     const ts = mv.targets;
-    if (ts.length === 1) return (ts[0][key] / (key === 'cx' ? compW : compH)).toFixed(5);
-    const norm = (v) => (v / (key === 'cx' ? compW : compH)).toFixed(5);
+    if (ts.length === 1) return (ts[0][key] / (key === 'cx' ? zW : zH)).toFixed(5);
+    const norm = (v) => (v / (key === 'cx' ? zW : zH)).toFixed(5);
     let e = norm(ts.at(-1)[key]);
     for (let i = ts.length - 1; i >= 1; i--) {
       const t0 = (ts[i].tMs / 1000) - panMs / 1000, t1 = ts[i].tMs / 1000;
@@ -446,13 +454,12 @@ export function buildGraph({
   // single downscale to the delivery size happens after it. At max zoom the
   // cropped region is ~compW/level wide, which lands near 1:1 with the output
   // instead of being blown up.
-  parts.push(
-    `[flat]zoompan=z='${z}'` +
-    `:x='max(0,min(((${wx})/max(${sum},0.0001))*iw*zoom-ow/2,iw*zoom-ow))'` +
-    `:y='max(0,min(((${wy})/max(${sum},0.0001))*ih*zoom-oh/2,ih*zoom-oh))'` +
-    `:d=1:s=${compW}x${compH}:fps=${fps}[zoomed]`,
-    `[zoomed]scale=${outW}:${outH}:flags=lanczos[out]`);
-  return parts.join(';');
+  ZOOMCHAIN = `zoompan=z='${z}'`
+    + `:x='max(0,min(((${wx})/max(${sum},0.0001))*iw*zoom-ow/2,iw*zoom-ow))'`
+    + `:y='max(0,min(((${wy})/max(${sum},0.0001))*ih*zoom-oh/2,ih*zoom-oh))'`
+    + `:d=1:s=${zW}x${zH}:fps=${fps}`;
+  parts.push(`[flat]scale=${outW}:${outH}:flags=lanczos[out]`);
+  return parts.join(';').replace('__ZOOMCHAIN__', ZOOMCHAIN);
 }
 
 export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ...opts }) {

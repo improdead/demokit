@@ -290,6 +290,61 @@ augment` adds change beats that landed away from any click. On a browser take it
 finds *fewer* beats than clicks does — a hover changes nothing on screen — which
 is the correct answer, not a bug.
 
+## An agent that watches it
+
+```
+bin/demokit critic .cache/shot-<name> out/demo.mp4
+```
+
+`review.mjs` measures. It cannot answer "does this look right", and pretending
+it can is how a demo of the wrong thing passes eight green checks. The critic
+builds the pack an agent actually watches: frames chosen from the EDIT (the
+opening, then before / peak / after for every camera move, then the ending),
+each labelled with what it is SUPPOSED to show, on one contact sheet.
+
+It also runs geometric invariants, because vision and arithmetic fail in
+different directions. DemoTape has the story that makes this concrete: a take
+where the camera held on the left of a text field while the sentence grew out of
+frame passed every assertion AND their vision gate - only a measured invariant
+caught it. So the critic checks that each zoom's target is inside the frame it
+produces, that no two moves land on the same place, and that the pointer really
+tracks a typing run.
+
+Three outcomes, never two: `verified`, `failed`, and `inconclusive` - the gate
+could not run. Treating "I could not look" as "it is fine" is the one result
+that quietly ships a bad demo.
+
+What the agent decides goes back as a patch, and unknown keys are named rather
+than ignored:
+
+```bash
+echo '{"dropZooms":[12800],"recipe":{"deep":"2.2"}}' > /tmp/p.json
+bin/demokit critic .cache/shot-x out/demo.mp4 --apply /tmp/p.json
+```
+
+## Zoom the footage, then frame it
+
+The zoom used to run on the finished composite - window inset on the backdrop,
+then crop the lot. That let the crop wander off the window and clamp against the
+canvas edge, so a peak framed a third of wallpaper with the window sliced
+through the middle. No amount of clamping fixes it, because the crop was never
+constrained to the content.
+
+Zooming the recording BEFORE insetting it removes the whole class of bug: the
+window cannot move, and the content zooms inside it. That is also what the
+reference demos do - the frame stays put, the screen inside it pushes in.
+
+It also decides the depth/sharpness trade-off. At 4K delivery every zoom
+upscales, so the depth cap has to stay low, and a 1.6x "zoom" showing 91% of the
+window frames nothing. Delivering 1080p from a 4K capture makes 1.9x a
+*downscale*, so the camera can be decisive and stay sharp:
+
+| zoom | crop px | % of window | to 4K | to 1080p |
+|---|---|---|---|---|
+| 1.60 | 2400 | 91% | 1.60x | 0.80x |
+| 1.90 | 2021 | 77% | 1.90x | 0.95x |
+| 2.20 | 1745 | 66% | 2.20x | 1.10x |
+
 ## Reviewing its own output
 
 ```

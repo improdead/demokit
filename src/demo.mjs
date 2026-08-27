@@ -144,6 +144,12 @@ const p = await pace({
 });
 if (p.skipped) copyFileSync(stage, outPath);
 else console.log(`paced ${p.duration.toFixed(1)}s -> ${(p.duration - p.saved).toFixed(1)}s`);
+// Persist how time was remapped. Without it nothing downstream can turn a
+// source timestamp into the moment it appears in the finished video, so a
+// critic looking for "the peak of move 2" has to guess.
+writeFileSync(join(shotDir, 'pace.json'), JSON.stringify({
+  sourceDurationSec: p.duration ?? null, segments: p.segs ?? [{ start: 0, end: p.duration, speed: 1 }],
+}, null, 1));
 writeFileSync(recipePath, JSON.stringify(recipe, null, 1));
 console.log(`wrote ${outPath}`);
 console.log(`recipe: ${recipePath} (edit a field and re-render; the footage is untouched)`);

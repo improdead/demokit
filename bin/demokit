@@ -7,6 +7,7 @@
 #   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
 #   bin/demokit wallpapers all                           # 4K grounds, local + fetched
 #   bin/demokit edit <shotDir>                           # why the camera moves, as a file
+#   bin/demokit critic <shotDir> out.mp4                 # frames to WATCH + invariants
 #   bin/demokit --session <id> <flow.json> <out.mp4>     # record via real Chrome (auth)
 #   bin/demokit flows/example.json out.mp4 [--level 1.35 --inset 0.84 ...]
 #   bin/demokit --render-only .cache/shot-example out.mp4   # re-render, no recapture
@@ -118,6 +119,13 @@ fi
 if [ "${1:-}" = "edit" ]; then
   shift; SHOT="${1:?usage: demokit edit <shotDir> [--print] [--max N] [--gap MS] [--pad F]}"; shift
   exec node src/edit.mjs "$SHOT" "$@"
+fi
+
+# Build the pack an agent watches, and apply what it decided.
+if [ "${1:-}" = "critic" ]; then
+  shift; SHOT="${1:?usage: demokit critic <shotDir> <out.mp4> [--apply patch.json]}"; shift
+  OUT="${1:?usage: demokit critic <shotDir> <out.mp4>}"; shift
+  exec node src/critic.mjs "$SHOT" "$OUT" "$@"
 fi
 
 if [ "${1:-}" = "wallpapers" ]; then
