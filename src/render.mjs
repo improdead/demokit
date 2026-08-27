@@ -358,8 +358,26 @@ export function buildGraph({
     const rw = zm.rect[2] * sx, rh = zm.rect[3] * sy;
     const cw = rw * (1 + 2 * pad), chh = rh * (1 + 2 * pad);
     let z = Math.min(compW / Math.max(1, cw), compH / Math.max(1, chh));
-    z = Math.max(1.02, Math.min(maxLevel, z));
-    return { z, cx: rx + rw / 2, cy: ry + rh / 2 };
+    // A zoom must be deep enough that the crop fits INSIDE the window. Below
+    // that the crop is physically wider than the window, so it has to include
+    // backdrop and the window edge slices through frame - which is what makes a
+    // shallow push look broken rather than subtle. With inset 0.76 the window
+    // is 2641px of a 3840 canvas, so anything under ~1.45x cannot be clean.
+    const fillZ = Math.max(compW / fgW, compH / fgH);
+    z = Math.max(fillZ, Math.min(Math.max(maxLevel, fillZ), z));
+
+    // Keep the crop INSIDE the window. Clamping only to the canvas lets the
+    // frame straddle the window edge, so you get a slice of UI and a slice of
+    // backdrop with the window sliced through the middle - which reads as
+    // broken, not as a zoom. A real screen recording never shows that: when it
+    // pushes in, it is inside the content.
+    const halfW = compW / (2 * z), halfH = compH / (2 * z);
+    let cx = rx + rw / 2, cy = ry + rh / 2;
+    if (halfW * 2 <= fgW) cx = Math.max(ox + halfW, Math.min(ox + fgW - halfW, cx));
+    else cx = Math.max(halfW, Math.min(compW - halfW, cx));
+    if (halfH * 2 <= fgH) cy = Math.max(oy + halfH, Math.min(oy + fgH - halfH, cy));
+    else cy = Math.max(halfH, Math.min(compH - halfH, cy));
+    return { z, cx, cy };
   };
 
   // Group targets into camera MOVES: one zoom in, pan between targets while

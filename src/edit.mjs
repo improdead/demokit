@@ -32,7 +32,7 @@ const run = promisify(execFile);
 
 const DEFAULTS = {
   minGapMs: 1800,        // two zooms closer than this merge into one push
-  holdMs: 1500,          // how long a zoom stays at depth
+  holdMs: 2200,          // how long a zoom stays at depth
   rampMs: 550,           // in and out
   padFrac: 0.55,         // extra room around the target rect, as a share of it
   changeFrac: 0.0025,    // pixels that must move for "something happened"
@@ -41,11 +41,14 @@ const DEFAULTS = {
   maxZooms: 6,
   sceneFrac: 0.45,       // more of the frame than this changed = a scene change
   sceneArea: 0.45,       // a target covering more of the frame than this is not one
-  chainGapMs: 3200,      // targets closer than this share one camera move
+  chainGapMs: 8000,      // targets closer than this share one camera move
+  minUseful: 1.25,       // below this a "zoom" is drift; stay still instead
+  usefulFill: 0.55,      // target should span this much of the frame when framed
   preLeadMs: 350,        // start the move slightly before the target
   panMs: 420,            // ease between targets inside a chain
   hoverIntent: true,     // an authored, labelled hover counts as a reason
-  maxTargets: 8,
+  maxTargets: 5,
+  blankFrac: 0.45,       // below this share of the usual on-screen content = blank
 };
 
 /** Where the pointer actually was over a span - OpenScreen calls this the
@@ -77,7 +80,7 @@ def load(p):
     im = Image.open(p).convert("L")
     h = max(1, round(im.height * 320 / im.width))
     return np.asarray(im.resize((320, h)), dtype=np.float32)
-out, prev = [], None
+out, inks, prev = [], [], None
 sx = None
 for f in picks:
     p = os.path.join(fdir, "f%05d.png" % f["i"])
@@ -86,6 +89,10 @@ for f in picks:
     cur = load(p)
     if sx is None:
         sx = man["width"] / cur.shape[1]
+    # How much is actually ON this frame. A page mid-navigation is near-blank,
+    # and a camera move that lands there pushes in on nothing.
+    ink = float((np.abs(np.diff(cur, axis=0)) > 12).mean())
+    inks.append({"t": f["ms"], "ink": ink})
     if prev is not None and prev.shape == cur.shape:
         d = np.abs(cur - prev)
         m = d > 14
@@ -101,7 +108,7 @@ for f in picks:
                 "y0": float(ys.min() * sx), "y1": float(ys.max() * sx),
             })
     prev = cur
-print(json.dumps(out))`;
+print(json.dumps({"track": out, "ink": inks}))`;
   const { stdout } = await run('python3', ['-c', py], { maxBuffer: 1 << 28 });
   return JSON.parse(stdout);
 }
@@ -124,7 +131,18 @@ export async function direct(shotDir, opts = {}) {
   const path = man.path || [];
   const endMs = man.endMs || (man.frames.at(-1)?.ms ?? 0);
 
-  const track = await changeTrack(shotDir, man);
+  const probe = await changeTrack(shotDir, man);
+  const track = probe.track || probe;
+  const inks = probe.ink || [];
+  /** Fraction of the frame carrying content at time t (0 = blank page). */
+  const inkAt = (t) => {
+    if (!inks.length) return 1;
+    let best = inks[0];
+    for (const s of inks) if (Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
+    return best.ink;
+  };
+  const inkMedian = inks.length
+    ? inks.map((s) => s.ink).sort((a, b) => a - b)[Math.floor(inks.length / 2)] : 1;
   const changedNear = (t) => track.filter((s) => s.t - t >= -o.lookBackMs && s.t - t <= o.lookFwdMs);
 
   // ---- 1. every candidate must justify itself ------------------------------
@@ -141,6 +159,13 @@ export async function direct(shotDir, opts = {}) {
     const intended = e.kind === 'hover' && !!e.label && o.hoverIntent;
 
     if (!acted && !moved && !intended) continue;   // rule 1: a reason, or nothing
+
+    // Do not frame a blank screen. Mid-navigation the page is nearly empty, and
+    // a move that lands there is a confident push-in on nothing.
+    if (inkAt(e.t) < inkMedian * o.blankFrac) {
+      e.blank = true;
+      continue;
+    }
 
     // rule 2: a rect, not a point. Prefer the element we acted on; fall back to
     // the region of the screen that actually changed.
@@ -203,6 +228,23 @@ export async function direct(shotDir, opts = {}) {
     .slice().sort((a, b) => b.weight - a.weight).slice(0, o.maxTargets)
     .sort((a, b) => a.tMs - b.tMs);
 
+  // ---- 2b. drop the ones that would barely magnify -------------------------
+  //
+  // A target that already fills half the frame solves to a ~1.1x push. That is
+  // not a zoom, it is drift - and it costs a full in-and-out cycle for no gain.
+  // Measured on a real take the camera moved 8 times in 30s, mostly by 7-15%:
+  // always moving, never enough to see anything. Better to stay still.
+  const frameW = man.width;
+  const useful = kept.filter((z) => {
+    const need = (o.usefulFill * frameW) / Math.max(1, z.rect[2]);
+    if (need >= o.minUseful) return true;
+    z.dropped = `would only magnify ${need.toFixed(2)}x`;
+    return false;
+  });
+  const shallow = kept.length - useful.length;
+  kept.length = 0;
+  kept.push(...useful);
+
   // ---- 3. annotate each with where the pointer really was ------------------
   for (const z of kept) {
     z.holdMs = o.holdMs;
@@ -246,6 +288,7 @@ export async function direct(shotDir, opts = {}) {
     durationMs: endMs,
     frame: { w: man.width, h: man.height },
     chains,
+    shallow,
     zooms: kept,
     // dropped candidates are kept so the decision is auditable, not silent
     rejected: events
@@ -260,6 +303,7 @@ export async function direct(shotDir, opts = {}) {
 function explain(edl) {
   const ch = edl.chains || [];
   console.log(`edit: ${ch.length} camera move(s) covering ${edl.zooms.length} target(s) over ${(edl.durationMs / 1000).toFixed(1)}s`);
+  if (edl.shallow) console.log(`  (${edl.shallow} target(s) dropped - too big to be worth magnifying)`);
   for (const c of ch) {
     console.log(`  ${(c.startMs / 1000).toFixed(1)}s-${(c.endMs / 1000).toFixed(1)}s  ${c.targets.length > 1 ? 'pan' : 'hold'}`);
     for (const z of c.targets) {
