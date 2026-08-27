@@ -436,6 +436,33 @@ see one that wanders.
 - Hovers, keystrokes and page changes move nothing. If the demo needs the camera
   somewhere, **click there**.
 
+## 8c. The frame — a window floating on a ground
+
+The look is a real window, centred, with room around it, sitting on a saturated
+ground. Three settings carry it, and all three have a wrong value that looks
+almost right:
+
+| flag | default | the failure |
+|---|---|---|
+| `--w` / `--h` | **3840x2160** | 1080p was the default; every 4K take needed two flags nobody remembers, so what shipped was 1080p described as 4K |
+| `--inset` | **0.72** | at 0.86 the window fills the frame edge to edge and the backdrop stops existing; below ~0.6 the UI is too small to read |
+| `--bg` | `auto` | see below |
+
+**Pick the ground by contrast, not by taste.** `auto` measures how bright the
+recording is and picks the opposite: a light app gets `dusk`, a dark one gets
+`linen`, anything in between gets `tide`.
+
+Two things that read as "nice backdrop" and are not:
+
+- **A blurred photograph of a real place.** It is muddy and low-contrast behind a
+  white UI, and `dusk` beside it is plainly more vivid. `auto` used to return a
+  macOS wallpaper unconditionally and that is exactly what it looked like.
+- **A photograph with shapes in it.** `paint-harbour` behind a findings table
+  reads as a second subject. The window is the subject.
+
+The shadow and corner radius scale with the source width, so they hold at 4K
+without being touched.
+
 ## 8b. Beats without a cursor
 
 A click is a good beat when there is a cursor to log. A terminal printing

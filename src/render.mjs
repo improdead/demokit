@@ -134,14 +134,20 @@ px = list(im.getdata())
 print(sum(px) / len(px))`;
   const { stdout } = await run('python3', ['-c', py]);
   const lum = parseFloat(stdout.trim());
-  // dark app -> rich, lighter ground; light app -> dark ground. Matches the
-  // standard guidance that a background exists to separate, not to blend.
-  // Prefer a real wallpaper when one is on disk. The generated grounds were
-  // built to recede so hard they read as a gradient; the look being copied is
-  // saturated and high-contrast, with the window floating ON it.
-  const wall = join(dir0, '.cache', 'wallpapers', 'mac-sonoma.png');
-  if (existsSync(wall)) return wall;
-  return lum < 90 ? 'dusk' : lum > 170 ? 'noir' : 'slate';
+  // A background exists to SEPARATE, not to blend - so pick by contrast against
+  // what was actually recorded.
+  //
+  // This used to return a macOS wallpaper unconditionally whenever one was on
+  // disk, on the theory that the generated grounds receded too hard to read as
+  // anything but a gradient. That was wrong twice over: a blurred photograph of
+  // a real place is muddy and low-contrast behind a white UI, and `dusk` put
+  // side by side with it is plainly the more vivid of the two. A photograph also
+  // brings shapes that compete with the window - paint-harbour behind this app
+  // reads as a second subject.
+  //
+  // Saturated gradients win under both light and dark UIs; the choice is only
+  // about which direction has room.
+  return lum > 150 ? 'dusk' : lum < 70 ? 'linen' : 'tide';
 }
 
 /** @param spec  "dusk" | "#101010" | "/path/to/wallpaper.png" | "blur" */

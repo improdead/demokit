@@ -110,9 +110,15 @@ if (arg('chrome', null) !== null) {
 const r = await render({
   shotDir, output: stage, assetDir: ASSETS,
   // capture is 2x device pixels; downscale to 1080p so the picture is sharp
-  outW: Number(arg('w', '1920')), outH: Number(arg('h', '1080')),
+  // 4K by default. 1080p was the default and every 4K take needed two flags
+  // nobody remembers, so the thing that shipped was 1080p with a note claiming
+  // otherwise. The capture is 3860px wide; anything less throws pixels away.
+  outW: Number(arg('w', '3840')), outH: Number(arg('h', '2160')),
   level: Number(arg('level', '1.4')),
-  inset: Number(arg('inset', '0.66')),
+  // How much of the frame the window occupies. Too tight and it stops floating
+  // and starts being a screenshot with a border; 0.86 filled the frame edge to
+  // edge and the backdrop stopped existing.
+  inset: Number(arg('inset', '0.72')),
   centerBias: Number(arg('bias', '0.4')),
   minGapMs: Number(arg('gap', '1500')),
   maxLevel: Number(arg('deep', '1.7')),
