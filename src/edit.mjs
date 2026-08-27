@@ -52,6 +52,10 @@ const DEFAULTS = {
   minHoldMs: 900,        // never shorter than this once the camera has moved
   settleMs: 700,         // linger this long after the last thing that moved
   maxTargets: 3,
+  mode: 'clicks',        // 'clicks' = one push per click; 'smart' = the full director
+  clickZoom: 1.85,       // fixed depth, so every push reads the same
+  clickHoldMs: 1500,     // in, hold, out
+  zoomTyping: false,
   blankFrac: 0.45,       // below this share of the usual on-screen content = blank
 };
 
@@ -117,6 +121,52 @@ print(json.dumps({"track": out, "ink": inks}))`;
   return JSON.parse(stdout);
 }
 
+/**
+ * The simple camera: one push per CLICK, centred on the cursor, then out again.
+ *
+ * The elaborate version below - change detection, hover intent, chaining, scene
+ * rejection - could always justify each individual zoom and still produced a
+ * camera that felt arbitrary, because "defensible" and "legible" are not the
+ * same thing. A viewer cannot see the reasoning; they see a camera that moves
+ * when they clicked and is still the rest of the time. So: clicks only,
+ * anchored on the pointer, one fixed depth.
+ */
+function directClicks(man, o) {
+  const events = man.events || [];
+  const path = man.path || [];
+  const clicks = events.filter((e) => e.kind === 'click' || (o.zoomTyping && e.kind === 'type'));
+
+  const chains = [];
+  for (const e of clicks) {
+    const last = chains.at(-1);
+    if (last && e.t - last.targets[0].tMs < o.minGapMs) continue;   // no double push
+    // Anchor on where the POINTER is, not on the element box - that is what the
+    // viewer's eye follows, and it is what "focus on the cursor" means. Falls
+    // back to the event's own coordinates when there is no pointer track, which
+    // is the case for the container path: its cursor is real, so nothing logs a
+    // synthetic one.
+    const a = path.length ? cursorAnchor(path, e.t - 250, e.t + 250) : null;
+    const cx = a ? a.x : e.x;
+    const cy = a ? a.y : e.y;
+    const halfW = Math.round(man.width / (2 * o.clickZoom));
+    const halfH = Math.round(man.height / (2 * o.clickZoom));
+    chains.push({
+      startMs: Math.max(0, e.t - o.preLeadMs),
+      endMs: e.t + o.clickHoldMs,
+      reason: `click: ${e.label || 'element'}`,
+      targets: [{
+        tMs: e.t,
+        rect: [cx - halfW, cy - halfH, halfW * 2, halfH * 2],
+        z: o.clickZoom,
+        reason: `click: ${e.label || 'element'}`,
+        kind: 'click',
+        cursorAnchor: a || undefined,
+      }],
+    });
+  }
+  return chains;
+}
+
 export async function direct(shotDir, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
   const manPath = join(shotDir, 'manifest.json');
@@ -134,6 +184,23 @@ export async function direct(shotDir, opts = {}) {
   }));
   const path = man.path || [];
   const endMs = man.endMs || (man.frames.at(-1)?.ms ?? 0);
+
+  // Simple mode is the default. The full director still exists behind --smart;
+  // the machinery is sound, it just is not what a demo needs.
+  if ((o.mode || 'clicks') === 'clicks') {
+    const chains = directClicks(man, o);
+    const edl = {
+      source: shotDir, durationMs: endMs, mode: 'clicks',
+      frame: { w: man.width, h: man.height },
+      warnings: chains.length ? [] : ['no clicks in this take - the camera will not move'],
+      chains, shallow: 0,
+      zooms: chains.flatMap((c) => c.targets),
+      rejected: events.filter((e) => e.kind !== 'click')
+        .map((e) => ({ tMs: e.t, kind: e.kind, label: e.label })).slice(0, 40),
+    };
+    writeFileSync(join(shotDir, 'edit.json'), JSON.stringify(edl, null, 1));
+    return edl;
+  }
 
   const probe = await changeTrack(shotDir, man);
   const track = probe.track || probe;
@@ -380,6 +447,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       maxZooms: arg('max', DEFAULTS.maxZooms),
       minGapMs: arg('gap', DEFAULTS.minGapMs),
       padFrac: arg('pad', DEFAULTS.padFrac),
+      clickZoom: arg('zoom', DEFAULTS.clickZoom),
+      mode: rest.includes('--smart') ? 'smart' : 'clicks',
     }));
   }
 }

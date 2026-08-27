@@ -370,13 +370,11 @@ export function buildGraph({
     const rx = zOx + zm.rect[0] * sx, ry = zOy + zm.rect[1] * sy;
     const rw = zm.rect[2] * sx, rh = zm.rect[3] * sy;
     const cw = rw * (1 + 2 * pad), chh = rh * (1 + 2 * pad);
-    let z = Math.min(zW / Math.max(1, cw), zH / Math.max(1, chh));
-    // A zoom must be deep enough that the crop fits INSIDE the window. Below
-    // that the crop is physically wider than the window, so it has to include
-    // backdrop and the window edge slices through frame - which is what makes a
-    // shallow push look broken rather than subtle. With inset 0.76 the window
-    // is 2641px of a 3840 canvas, so anything under ~1.45x cannot be clean.
-    z = Math.max(1.0, Math.min(maxLevel, z));
+    // A target may state its depth outright. The simple camera does, so every
+    // push travels the same distance and the rhythm is predictable.
+    let z = zm.z
+      ? zm.z
+      : Math.max(1.0, Math.min(maxLevel, Math.min(zW / Math.max(1, cw), zH / Math.max(1, chh))));
 
     // Keep the crop INSIDE the window. Clamping only to the canvas lets the
     // frame straddle the window edge, so you get a slice of UI and a slice of

@@ -377,6 +377,27 @@ Preflight has three causes and three different fixes:
 | row/list selectors missing, `looksEmpty` | S0 does not exist | seed it (§4–5) |
 | only later-step selectors missing | that state is not rendered yet | `"later": true` on those steps |
 
+## 8a. The camera
+
+**One push per click, centred on the cursor, then out. That is the whole rule.**
+
+```
+still ──▶ click ──▶ push in on the pointer ──▶ hold ──▶ out ──▶ still
+```
+
+The elaborate director — change detection, hover intent, chaining, scene
+rejection — is still there behind `--smart`, and every zoom it produced could be
+justified individually. It still read as arbitrary, because *defensible* and
+*legible* are not the same thing. A viewer cannot see the reasoning. They see a
+camera that moves when they clicked and is still the rest of the time, or they
+see one that wanders.
+
+- `--zoom 1.85` sets the depth. Every push is the same distance, so the rhythm
+  is predictable rather than a series of different-sized surprises.
+- Two clicks closer than `minGapMs` produce one push, not two.
+- Hovers, keystrokes and page changes move nothing. If the demo needs the camera
+  somewhere, **click there**.
+
 ## 8b. Beats without a cursor
 
 A click is a good beat when there is a cursor to log. A terminal printing
