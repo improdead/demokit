@@ -21,7 +21,8 @@ import { join } from 'node:path';
 
 const run = promisify(execFile);
 
-export async function captureScreen({ shotDir, seconds, display = 1, region = null, fps = 30, app = null, fill = 0.78 }) {
+export async function captureScreen({ shotDir, seconds, display = 1, region = null,
+                                     fps = 30, app = null, fill = 0.78, drive = null }) {
   // Stage the window first. Filming the whole display puts the dock, the menu
   // bar, other windows and the desktop wallpaper in the frame - all of which
   // then fight the backdrop we composite onto. A staged window gives the same
@@ -49,10 +50,25 @@ export async function captureScreen({ shotDir, seconds, display = 1, region = nu
   else args.push('-D', String(display));
   args.push(mov);
 
+  // Something has to USE the app while the camera runs. Without this the screen
+  // path can only film whatever happens by itself, which for a terminal is
+  // nothing at all - and that is why the terminal demo was a drawn window
+  // instead of a recording of a real one.
   await new Promise((res, rej) => {
     const p = spawn('screencapture', args, { stdio: 'inherit' });
+    let driver = null;
+    if (drive) {
+      // Let the recorder actually be rolling before anything moves.
+      setTimeout(() => {
+        driver = spawn('bash', ['-c', drive], { stdio: 'inherit' });
+        driver.on('error', (e) => console.error('drive: ' + e.message));
+      }, 500);
+    }
     p.on('error', rej);
-    p.on('exit', (c) => (c === 0 ? res() : rej(new Error(`screencapture exited ${c}`))));
+    p.on('exit', (c) => {
+      if (driver && driver.exitCode === null) driver.kill();
+      return c === 0 ? res() : rej(new Error(`screencapture exited ${c}`));
+    });
   });
   if (!existsSync(mov)) throw new Error('screencapture produced no file');
 
@@ -107,6 +123,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     app: arg('app', null),
     fill: Number(arg('fill', '0.78')),
     fps: Number(arg('fps', '30')),
+    drive: arg('drive', null),
   });
   console.log(`screen: ${r.frames} frames @ ${r.width}x${r.height}, ${r.duration.toFixed(1)}s -> ${shotDir}`);
 }

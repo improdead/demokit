@@ -3,7 +3,8 @@
 #
 #   bin/demokit probe <url>                              # look before you plan
 #   bin/demokit box flows/x.json out.mp4                 # real cursor, in a container
-#   bin/demokit term "pytest -q" out.mp4                 # a terminal, rendered offscreen
+#   bin/demokit term "pytest -q" out.mp4                 # a terminal, drawn offscreen
+#   bin/demokit termreal spec.json out.mp4               # a REAL recording of Terminal.app
 #   bin/demokit screen out.mp4 --app "Google Chrome" --seconds 30   # real cursor
 #   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
 #   bin/demokit wallpapers all                           # 4K grounds, local + fetched
@@ -98,6 +99,43 @@ if [ "${1:-}" = "term" ]; then
   exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
 fi
 
+# A REAL screen recording of the real Terminal.app, driven by keystrokes.
+#
+# `term` draws the window; this films one. It costs the screen - the machine
+# cannot be used while it records - and needs Accessibility permission, and in
+# exchange every pixel is real, chrome and font rendering included.
+if [ "${1:-}" = "termreal" ]; then
+  shift; SPEC="${1:?usage: demokit termreal <spec.json> <out.mp4> [--seconds N] [render flags]}"; shift
+  OUT="${1:?usage: demokit termreal <spec.json> <out.mp4>}"; shift
+  SHOT=".cache/shot-termreal"
+  SECS=18; FILL=0.80; RENDARGS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --seconds) SECS="$2"; shift 2;;
+      --fill) FILL="$2"; shift 2;;
+      *) RENDARGS+=("$1"); shift;;
+    esac
+  done
+  # One window, targeted by id from here on: staging one window while the
+  # keystrokes go to another films a region bigger than the window, with the
+  # desktop showing behind it.
+  PROF="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("prepare",{}).get("profile","Pro"))' "$SPEC")"
+  SAVED=".cache/term-profile-$PROF.json"
+  mkdir -p .cache
+  WID="$(node src/termdrive.mjs "$SPEC" --prepare --save "$SAVED")"
+  echo "termreal: driving Terminal window $WID (profile '$PROF' saved to $SAVED)"
+  node src/termdrive.mjs --front "$WID"
+  sleep 1
+  node src/screen.mjs "$SHOT" --app Terminal --fill "$FILL" --seconds "$SECS" --fps 30 \
+    --drive "node src/termdrive.mjs $SPEC --window $WID"
+  RC=$?
+  # Put the user's profile back whatever happened. Recording a video is not a
+  # reason to leave someone's terminal a different colour.
+  node src/termdrive.mjs --restore "$PROF" "$SAVED" || true
+  [ $RC -eq 0 ] || exit $RC
+  exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
+fi
+
 # Screen recording of a display or a region, for native apps that are not a
 # terminal. Uses macOS screencapture, which already holds the permission.
 if [ "${1:-}" = "screen" ]; then
@@ -106,7 +144,7 @@ if [ "${1:-}" = "screen" ]; then
   SCRARGS=(); RENDARGS=()
   while [ $# -gt 0 ]; do
     case "$1" in
-      --seconds|--display|--region|--fps|--app|--fill) SCRARGS+=("$1" "$2"); shift 2;;
+      --seconds|--display|--region|--fps|--app|--fill|--drive) SCRARGS+=("$1" "$2"); shift 2;;
       *) RENDARGS+=("$1"); shift;;
     esac
   done

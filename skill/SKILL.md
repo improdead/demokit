@@ -486,7 +486,42 @@ display is 1% of the frame height. `XCURSOR_THEME=Adwaita` and `XCURSOR_SIZE`
 at ~2.8% of display height fix that, and Chromium reads both at startup, so they
 have to be set on its launch line.
 
-## 8c2. The terminal window is drawn, and it has to be drawn correctly
+## 8c1. Two terminal paths, and they are not the same thing
+
+| | `demokit term` | `demokit termreal` |
+|---|---|---|
+| the window | **drawn** by term.py with PIL | **filmed** — the real Terminal.app |
+| the output | real: a real pty, a real command | identical |
+| the chrome, font, prompt | drawn to macOS measurements | genuinely macOS pixels |
+| runs in the background | yes | **no — it takes the screen** |
+| needs | nothing | Screen Recording + Accessibility |
+
+Say which one a video is. "A real terminal" means different things across that
+line, and the difference is not visible in the result.
+
+`termreal` drives the window with System Events keystrokes at human speed, in
+**one** AppleScript for the whole session — osascript costs ~50ms of process
+setup per call, which is the same mistake that made the container's pointer take
+four seconds to cross a window.
+
+Three traps, all of which produced a broken take before they were fixed:
+
+- **Target one window by id.** A bare `activate` raises whichever Terminal window
+  is frontmost; with more than one open, the staging sizes one window while the
+  keystrokes go into another, and the take films a region larger than the window
+  with the desktop showing behind it.
+- **One `do script`.** Two of them racing on the same tty produced
+  `zsh: command not found: trclear`.
+- **Opaque background.** The stock Pro profile is semi-transparent, so whatever
+  is behind the window bleeds through the text.
+
+Those last two mean editing the user's *profile* — Terminal has no per-window
+override and no scriptable way to make a throwaway one. So every property is
+read first and put back afterwards, the same way `stage.mjs` restores window
+bounds. Recording a video is not a reason to leave someone's terminal a
+different colour.
+
+## 8c2. When the terminal window is drawn, it has to be drawn correctly
 
 A terminal capture is a REAL pty running the REAL command — every character is
 that command's actual output, nothing is simulated. What is drawn is the window
