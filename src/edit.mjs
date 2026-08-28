@@ -56,7 +56,11 @@ const DEFAULTS = {
   minHoldMs: 900,        // never shorter than this once the camera has moved
   settleMs: 700,         // linger this long after the last thing that moved
   maxTargets: 3,
-  mode: 'cap',           // 'cap' = Cap's auto-zoom, ported; 'still' = never moves; 'clicks'; 'smart'
+  // Still by default. Cap's auto-zoom is ported and faithful and it was still
+  // rejected: merged into one segment it pushes in and then holds for the whole
+  // middle of the video, which reads as stuck rather than as calm. A demo of a
+  // screen this dense does not need the camera to move.
+  mode: 'still',         // 'still'; 'cap' = Cap's auto-zoom; 'clicks'; 'smart'
   // Fixed depth, so every push reads the same - but the value is not a taste
   // setting. Depth is what BUYS centring: the camera can only move the crop
   // within `window - canvas/z`, so at 1.85 only a click in the middle 20% of
@@ -356,7 +360,7 @@ export async function direct(shotDir, opts = {}) {
   // measured - and it was still not wanted. A demo does not need the camera to
   // move; it needs the product to do something worth watching, and the pacing
   // pass is what makes that read. Bring it back with --zoom-clicks.
-  if ((o.mode || 'cap') === 'cap') {
+  if (o.mode === 'cap') {
     const chains = capZoom(man, o);
     const edl = {
       source: shotDir, durationMs: endMs, mode: 'cap',
@@ -371,7 +375,7 @@ export async function direct(shotDir, opts = {}) {
     return edl;
   }
 
-  if (o.mode === 'still') {
+  if ((o.mode || 'still') === 'still') {
     const edl = {
       source: shotDir, durationMs: endMs, mode: 'still',
       frame: { w: man.width, h: man.height },
@@ -644,8 +648,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       padFrac: arg('pad', DEFAULTS.padFrac),
       clickZoom: arg('zoom', DEFAULTS.clickZoom),
       mode: rest.includes('--smart') ? 'smart'
-        : rest.includes('--still') ? 'still'
-        : rest.includes('--zoom-clicks') ? 'clicks' : 'cap',
+        : rest.includes('--cap') ? 'cap'
+        : rest.includes('--zoom-clicks') ? 'clicks' : 'still',
     }));
   }
 }

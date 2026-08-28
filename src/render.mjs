@@ -677,7 +677,7 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
     for (const z of edl.zooms || []) if (z.rect) z.rect = [z.rect[0], z.rect[1] - trimTop + barH, z.rect[2], z.rect[3]];
   }
   const bar = macLights
-    ? await makeTitleBar({ dir: assetDir, w: even(srcW), h: barH, frame: firstFrame })
+    ? await makeTitleBar({ dir: assetDir, w: even(srcW), h: barH, frame: firstFrame, trimTop })
     : null;
 
   const graph = buildGraph({
@@ -715,22 +715,31 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
  * So the WM bar is cropped away and these go where they belong. Same
  * measurements as the terminal chrome: 12pt across, 20pt apart, 20pt in.
  */
-export async function makeTitleBar({ dir, w, h, frame }) {
+export async function makeTitleBar({ dir, w, h, frame, trimTop = 0 }) {
   const p = join(dir, `macbar-${w}x${h}.png`);
   if (existsSync(p)) return p;
   // Match the bar to the browser's own tab strip, sampled from the recording,
   // so it reads as one window rather than a strip glued on top.
   const py = `
 from PIL import Image, ImageDraw
+import statistics
 src = Image.open(${JSON.stringify(frame)}).convert("RGB")
 w, h = ${w}, ${h}
-# a point inside the tab strip, clear of the tab itself
-bg = src.getpixel((int(src.width * 0.80), min(src.height - 1, int(h * 1.4))))
+# The bar has to be INDISTINGUISHABLE from the tab strip below it. Chrome on
+# macOS has no separate title bar at all - the tab strip is the title bar - so a
+# slab in a slightly different grey reads as two stacked bars, which is exactly
+# what it looked like. One sampled pixel landed on a gradient and came out 10
+# levels dark; take the median of a band on the right, clear of the tabs.
+y0 = ${trimTop} + int((src.height - ${trimTop}) * 0.004)
+band = [src.getpixel((x, y))
+        for y in range(y0 + 6, y0 + max(10, h // 2))
+        for x in range(int(src.width * 0.62), int(src.width * 0.92), 7)]
+bg = tuple(int(statistics.median([p[i] for p in band])) for i in range(3))
 im = Image.new("RGB", (w, h), bg)
 d = ImageDraw.Draw(im)
-# the faint top highlight and the hairline under the bar, as on a real window
-d.line([(0, 0), (w, 0)], fill=tuple(min(255, c + 14) for c in bg))
-d.line([(0, h - 1), (w, h - 1)], fill=tuple(max(0, c - 26) for c in bg))
+# A top highlight, and NO line at the bottom - there is no seam there on a real
+# window because there is no join.
+d.line([(0, 0), (w, 0)], fill=tuple(min(255, c + 10) for c in bg))
 dia = h * 12 / 28.0
 gap = h * 20 / 28.0
 for i, col in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):

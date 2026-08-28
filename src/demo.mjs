@@ -23,8 +23,8 @@ if (!shotArg || !outArg) {
   console.error('           | dusk ember tide slate noir linen | #rrggbb | <wallpaper.jpg> | blur');
   console.error('  --bgblur 0.004 --bgsat 0.82 --bgdim 0.92   how far a photo backdrop recedes');
   console.error('  --edit   auto (write edit.json) | off      --redirect  regenerate it');
-  console.error('  --still  camera never moves   --zoom-clicks  one push per click');
-  console.error('           (default: Cap auto-zoom - merged click segments that follow the cursor)');
+  console.error('  --cap    Cap auto-zoom (merged click segments)   --zoom-clicks  one push per click');
+  console.error('           (default: still - the camera does not move)');
   console.error('  --pad    0.55  room around a zoom target, as a share of the target');
   console.error('  --deep   1.7   deepest zoom; small targets approach it, big ones stay shallow');
   console.error('  --chrome <url> draw macOS + browser chrome around the page  [--tabs a|b|c]');
@@ -35,7 +35,7 @@ if (!shotArg || !outArg) {
 // re-renders (the autotuner especially) silently drops --w/--bg/--chrome and
 // hands back a 1080p demo on a default background. Idea taken from DemoTape's
 // recipe.json: change a field, re-render, footage identical.
-const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'edgesnap', 'maxoff', 'still', 'deadspeed', 'tailhold', 'headhold', 'gap', 'keep', 'speed',
+const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'edgesnap', 'maxoff', 'still', 'deadspeed', 'tailhold', 'headhold', 'read', 'gap', 'keep', 'speed',
   'bg', 'bgblur', 'bgsat', 'bgdim', 'chrome', 'tabs', 'chrome-theme', 'pull', 'pullms', 'pad'];
 const arg0 = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
 const shotDir = resolve(shotArg), outPath = resolve(outArg);
@@ -76,8 +76,8 @@ if (arg('edit', 'auto') !== 'off') {
       minGapMs: Number(arg('gap', '1800')),
       padFrac: Number(arg('pad', '0.55')),
       mode: rest.includes('--smart') ? 'smart'
-        : rest.includes('--still') ? 'still'
-        : rest.includes('--zoom-clicks') ? 'clicks' : 'cap',
+        : rest.includes('--cap') ? 'cap'
+        : rest.includes('--zoom-clicks') ? 'clicks' : 'still',
     });
     for (const w of edl.warnings || []) console.log(`edit: ! ${w}`);
     if (edl.mode === 'still') console.log('edit: still camera - it does not move');
@@ -170,6 +170,23 @@ function protectedSpans(man, edl) {
     if (e.kind === 'type') out.push({ fromMs: Math.max(0, e.t - 2600), toMs: e.t + 700 });
   }
 
+  // Time to READ what just appeared.
+  //
+  // "Nothing is moving" and "nothing to look at" are different things, and the
+  // dead-air pass only measures the first. A click that reveals a page leaves
+  // the screen perfectly static while the viewer reads it - which is the payoff,
+  // not dead air. Without this the take collapsed from 14.8s to 4.1s and every
+  // reveal flashed past.
+  //
+  // 2.5s, which is the same number Cap holds a zoom for after a click, for the
+  // same reason.
+  const readMs = Number(arg('read', '2500'));
+  for (const e of man.events || []) {
+    if (e.kind === 'click' || e.kind === 'type') {
+      out.push({ fromMs: e.t, toMs: e.t + readMs });
+    }
+  }
+
   // Pointer motion: any stretch where the cursor is actually travelling. A
   // glide is the one moment a viewer's eye is locked to something, and it is
   // the cheapest thing in the video to get wrong.
@@ -201,25 +218,37 @@ const stillSec = Number(arg('still', '3'));
 let dead = [];
 try {
   const st = await stillness(shotDir, { minSec: stillSec });
-  const chains = (edlNow?.chains) || [];
   const tailKeep = Number(arg('tailhold', '2.6')) * 1000;
   const headKeep = Number(arg('headhold', '1.4')) * 1000;
   const endMs = manNow.frames?.length ? manNow.frames.at(-1).ms : 0;
+
+  // Stretches dead air may never touch: a camera move, and the seconds after a
+  // change while the viewer READS what appeared. Without the second one the take
+  // collapsed from 14.8s to 4.1s - a page that has just been revealed is
+  // perfectly static, and the stillness pass cannot tell that apart from
+  // nothing happening. 2.5s, the same number Cap holds a zoom for after a click,
+  // for the same reason.
+  const keepOut = [
+    ...((edlNow?.chains) || []).map((c) => [c.startMs, c.endMs]),
+    ...(manNow.events || [])
+      .filter((e) => e.kind === 'click' || e.kind === 'type')
+      .map((e) => [e.t, e.t + Number(arg('read', '2500'))]),
+  ].sort((a, b) => a[0] - b[0]);
+
   for (const sp of st.spans) {
-    // Never cut inside a camera move, and never eat the hold on the payoff -
-    // resting on the outcome is the point, and a demo that ends on a jump cut
-    // has thrown away the only frame anyone remembers.
-    // A hold at each end. The opening needs a beat before anything moves - the
-    // first cut of this had the first click land at 0.54s, which reads as the
-    // video starting mid-action - and the tail is the payoff, not dead air.
-    let from = Math.max(sp.from, headKeep), to = Math.min(sp.to, endMs - tailKeep);
-    for (const c of chains) {
-      if (c.endMs > from && c.startMs < to) {
-        if (c.startMs - from > 800) to = Math.min(to, c.startMs - 200);
-        else from = Math.max(from, c.endMs + 200);
+    let segs = [[Math.max(sp.from, headKeep), Math.min(sp.to, endMs - tailKeep)]];
+    for (const [a, b] of keepOut) {
+      const next = [];
+      for (const [x, y] of segs) {
+        if (b <= x || a >= y) { next.push([x, y]); continue; }
+        if (a > x) next.push([x, Math.min(y, a)]);
+        if (b < y) next.push([Math.max(x, b), y]);
       }
+      segs = next;
     }
-    if (to - from >= stillSec * 1000) dead.push({ from: from / 1000, to: to / 1000 });
+    for (const [from, to] of segs) {
+      if (to - from >= stillSec * 1000) dead.push({ from: from / 1000, to: to / 1000 });
+    }
   }
   if (dead.length) {
     const frozen = dead.reduce((a, d) => a + (d.to - d.from), 0);
