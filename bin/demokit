@@ -9,6 +9,8 @@
 #   bin/demokit review <shotDir> out.mp4 --fix           # measure it, then improve it
 #   bin/demokit wallpapers all                           # 4K grounds, local + fetched
 #   bin/demokit edit <shotDir>                           # why the camera moves, as a file
+#   bin/demokit raw <shotDir>                            # the take, with no edit applied
+#   bin/demokit still <shotDir>                          # where nothing is happening
 #   bin/demokit verify <shotDir> out.mp4                 # did the FEATURE work
 #   bin/demokit critic <shotDir> out.mp4                 # frames to WATCH + invariants
 #   bin/demokit --session <id> <flow.json> <out.mp4>     # record via real Chrome (auth)
@@ -162,6 +164,18 @@ if [ "${1:-}" = "edit" ]; then
 fi
 
 # Build the pack an agent watches, and apply what it decided.
+# What did we actually record, before any edit had an opinion about it.
+if [ "${1:-}" = "raw" ]; then
+  shift; SHOT="${1:?usage: demokit raw <shotDir> [--n 12]}"; shift
+  exec node src/raw.mjs "$SHOT" "$@"
+fi
+
+# Where is nothing happening.
+if [ "${1:-}" = "still" ]; then
+  shift; SHOT="${1:?usage: demokit still <shotDir> [--sec 3]}"; shift
+  exec node src/still.mjs "$SHOT" "$@"
+fi
+
 if [ "${1:-}" = "verify" ]; then
   shift; SHOT="${1:?usage: demokit verify <shotDir> [out.mp4]}"; shift
   exec node src/verify.mjs "$SHOT" "$@"

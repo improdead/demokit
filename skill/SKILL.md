@@ -442,6 +442,23 @@ see one that wanders.
 - Hovers, keystrokes and page changes move nothing. If the demo needs the camera
   somewhere, **click there**.
 
+### The push starts ON the click, never before it
+
+The zoom envelope used to begin `ramp` seconds *before* its start time, and the
+aim envelope led by `ramp * 2.2` on top. With the start set to the click, that
+meant the camera began moving **1.2 seconds before the click** — it was
+literally predicting the thing that caused it, which is the whole of "it zooms
+in before I click".
+
+Both envelopes now begin at the click. The aim still leads the zoom, but *within*
+the push: it ramps at `0.45x` the duration, so the centre is in place at
+click+0.25s and depth arrives at click+0.55s — the camera scales straight in
+instead of sliding sideways into its target.
+
+Measure it rather than trusting it: sample the finished cut at 30fps around the
+click and print the frame-to-frame difference. Motion must read 0.00 up to the
+click frame.
+
 ### The camera follows the cursor, and depth is what lets it
 
 Anchor on the **pointer**, never on the element box. The box moves when the page
@@ -629,6 +646,32 @@ It runs automatically whenever a capture has no click log (`term`, `screen`).
 On a browser take, add it to the click beats with `--beats augment`, or turn it
 off with `--beats off`. It deliberately finds fewer beats than clicks does on a
 browser take, because a hover changes nothing on screen — which is the point.
+
+## 8d. Look at the RAW take before you look at the edit
+
+```bash
+bin/demokit raw .cache/shot-<name>      # the take, with no edit applied
+bin/demokit still .cache/shot-<name>    # where nothing is happening
+```
+
+Every other review surface inherits the edit's opinion. `critic` samples before /
+peak / after for each camera move — so a move that should never have existed
+gets three frames devoted to it, and a stretch the director ignored gets none.
+`raw` samples evenly and labels each frame with its source time, whether the
+screen was frozen there, and which step was running.
+
+Read it first, because it answers the question the rest cannot: **is there
+anything in this recording?** The take that prompted this was **85% frozen** —
+20.1 of 23.8 seconds with not one pixel changing — and every camera-and-framing
+check passed on it. If it is boring in `raw`, no camera fixes it.
+
+**Dead air is measured, not inferred.** The pacing used to reason from the event
+log: a camera move is running, the pointer is travelling, so keep it at normal
+speed. That is a guess about whether anything is *on screen*, and a flow's own
+`ms` waits routinely hold a "protected" window open across ten frozen seconds.
+Any stretch over `--still` (3s) with no measured change is fast-forwarded at
+`--deadspeed`, whatever the event log thinks — except inside a camera move, and
+except the head and tail holds.
 
 ## 9. Verify — first that the FEATURE worked, then that the film is good
 

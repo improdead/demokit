@@ -33,7 +33,7 @@ if (!shotArg || !outArg) {
 // re-renders (the autotuner especially) silently drops --w/--bg/--chrome and
 // hands back a 1080p demo on a default background. Idea taken from DemoTape's
 // recipe.json: change a field, re-render, footage identical.
-const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'edgesnap', 'maxoff', 'gap', 'keep', 'speed',
+const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'edgesnap', 'maxoff', 'still', 'deadspeed', 'tailhold', 'headhold', 'gap', 'keep', 'speed',
   'bg', 'bgblur', 'bgsat', 'bgdim', 'chrome', 'tabs', 'chrome-theme', 'pull', 'pullms', 'pad'];
 const arg0 = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
 const shotDir = resolve(shotArg), outPath = resolve(outArg);
@@ -122,6 +122,8 @@ const r = await render({
   centerBias: Number(arg('bias', '0')),
   edgeSnap: Number(arg('edgesnap', '0')),
   maxOffFrac: Number(arg('maxoff', '0.055')),
+  trimTop: rest.includes('--no-trim') ? 0 : undefined,
+  macLights: !rest.includes('--no-maclights'),
   minGapMs: Number(arg('gap', '1500')),
   maxLevel: Number(arg('deep', '1.7')),
   openPull: Number(arg('pull', '1.28')),
@@ -181,6 +183,45 @@ function protectedSpans(man, edl) {
 
 const manNow = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
 const spans = protectedSpans(manNow, edlNow);
+
+// Measured dead air, which overrides all of the above. The protected spans are
+// reasoned from the event log and are wrong in one direction: a flow's own `ms`
+// waits hold a window open across stretches where the screen does not change at
+// all. On the take this was written for, 20.1 of 23.8 seconds were frozen and
+// the event log had found 3 of them.
+const { stillness } = await import('./still.mjs');
+const stillSec = Number(arg('still', '3'));
+let dead = [];
+try {
+  const st = await stillness(shotDir, { minSec: stillSec });
+  const chains = (edlNow?.chains) || [];
+  const tailKeep = Number(arg('tailhold', '2.6')) * 1000;
+  const headKeep = Number(arg('headhold', '1.4')) * 1000;
+  const endMs = manNow.frames?.length ? manNow.frames.at(-1).ms : 0;
+  for (const sp of st.spans) {
+    // Never cut inside a camera move, and never eat the hold on the payoff -
+    // resting on the outcome is the point, and a demo that ends on a jump cut
+    // has thrown away the only frame anyone remembers.
+    // A hold at each end. The opening needs a beat before anything moves - the
+    // first cut of this had the first click land at 0.54s, which reads as the
+    // video starting mid-action - and the tail is the payoff, not dead air.
+    let from = Math.max(sp.from, headKeep), to = Math.min(sp.to, endMs - tailKeep);
+    for (const c of chains) {
+      if (c.endMs > from && c.startMs < to) {
+        if (c.startMs - from > 800) to = Math.min(to, c.startMs - 200);
+        else from = Math.max(from, c.endMs + 200);
+      }
+    }
+    if (to - from >= stillSec * 1000) dead.push({ from: from / 1000, to: to / 1000 });
+  }
+  if (dead.length) {
+    const frozen = dead.reduce((a, d) => a + (d.to - d.from), 0);
+    console.log(`still: ${dead.length} stretch(es) with nothing on screen for ${stillSec}s+ `
+      + `(${frozen.toFixed(1)}s) - fast-forwarding them`);
+  }
+} catch (e) {
+  console.log('still: could not measure dead air - ' + String(e.message || e).slice(0, 90));
+}
 const clicks = spans.length
   ? protectOpen.concat(spans)
   : manNow.clicks.map((c) => ({ ...c, atMs: c.t }));
@@ -189,6 +230,7 @@ console.log(`pace: protecting ${spans.length} span(s) - camera moves, typing run
 const p = await pace({
   input: stage, output: outPath, clicks, workDir: ASSETS,
   keep: Number(arg('keep', '0.55')), speed: Number(arg('speed', '4')),
+  dead, deadSpeed: Number(arg('deadspeed', '9')),
 });
 if (p.skipped) copyFileSync(stage, outPath);
 else console.log(`paced ${p.duration.toFixed(1)}s -> ${(p.duration - p.saved).toFixed(1)}s`);

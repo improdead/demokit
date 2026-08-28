@@ -307,6 +307,7 @@ print('ok')`;
 
 export function buildGraph({
   srcW, srcH, outW, outH, fps, clicks, rippleCount, cursorH,
+  macLights = false, trimTop = 0, barH = 0,
   // Composite at capture resolution. Building at 1080p and letting zoompan
   // upscale 1.35x throws away the 2560 capture at exactly the moment the
   // viewer is looking closest. Instead we crop from the full-res canvas and
@@ -325,7 +326,25 @@ export function buildGraph({
   // Cursor and click pulses are already composited into the frames by
   // src/cursor.py - it interpolates the dense pointer path per frame, which an
   // ffmpeg overlay expression cannot do without encoding hundreds of samples.
-  parts.push(`[0:v]fps=${fps}[withcur]`);
+  // Crop the window manager's title bar away and put macOS buttons on the tab
+  // strip, so the window matches the desktop it is sitting on.
+  const M = 1, S = 2, B = 3, LT = 4; // inputs: 0 frames, 1 mask, 2 shadow, 3 backdrop, 4 buttons
+  const trim = Math.max(0, Math.round(trimTop || 0));
+  const bar = Math.max(0, Math.round(barH || 0));
+  if (trim > 0 && bar > 0) {
+    // Cut the window manager's bar off and put a macOS one in its place. The
+    // first attempt overlaid the buttons straight onto the tab strip, where
+    // macOS keeps them - but Linux Chromium starts its tabs at the left edge,
+    // so the lights landed on top of the tab title and read as broken. A bar of
+    // its own is not pixel-identical to Chrome on a Mac, and it is coherent.
+    parts.push(
+      `[0:v]fps=${fps},crop=iw:ih-${trim}:0:${trim},pad=iw:ih+${bar}:0:${bar}[padded]`,
+      `[padded][${LT}:v]overlay=0:0[withcur]`);
+  } else if (trim > 0) {
+    parts.push(`[0:v]fps=${fps},crop=iw:ih-${trim}:0:${trim}[withcur]`);
+  } else {
+    parts.push(`[0:v]fps=${fps}[withcur]`);
+  }
   // The zoom runs on the FINISHED composite - window, chrome, shadow and
   // backdrop together - so pushing in reads as a camera moving toward one
   // physical object. Zooming the recording alone and insetting it afterwards
@@ -349,7 +368,6 @@ export function buildGraph({
   fgH = even(Math.round(fgH));
   const ox = Math.round((compW - fgW) / 2);
   const oy = Math.round((compH - fgH) / 2);
-  const M = 1, S = 2, B = 3; // inputs: 0 frames, 1 mask, 2 shadow, 3 backdrop
 
   if (backdrop) {
     // A still wallpaper. It has to be scaled here rather than pre-sized,
@@ -486,17 +504,22 @@ export function buildGraph({
     `clip(min(min((${tv}-${aSec.toFixed(4)})/${rIn.toFixed(4)},(${bSec.toFixed(4)}-${tv})/${rOut.toFixed(4)}),1),0,1)`;
   const smooth = (e) => `(3*pow(${e},2)-2*pow(${e},3))`;
 
-  // Zoom amount.
-  const envs = moves.map((mv) => smooth(trapezoid((mv.startMs / 1000) - ramp, (mv.endMs / 1000) + ramp, ramp, ramp)));
+  // Zoom amount. The ramp begins AT the click and reaches depth after it.
+  //
+  // It used to begin `ramp` seconds BEFORE startMs, so with startMs set to the
+  // click the camera was already moving 0.55s before the thing that caused it -
+  // and the aim envelope led by 1.21s on top. That is the whole of "it zooms in
+  // before I click": the push was literally predicting the click.
+  const envs = moves.map((mv) => smooth(trapezoid(
+    mv.startMs / 1000, (mv.endMs / 1000) + ramp, ramp, ramp)));
 
-  // Framing centre, PRE-AIMED. While the zoom is still ~1x the viewport covers
-  // the whole frame, so the centre can be moved for free - and it must be,
-  // because a centre that arrives at the same rate as the zoom makes the camera
-  // slide sideways into its target instead of scaling straight at it. Cap calls
-  // this CENTER_PREAIM. The aim envelope simply leads the zoom envelope.
-  const aimLead = ramp * 2.2;
+  // Framing centre, PRE-AIMED - but pre-aimed WITHIN the push, not before it.
+  // The centre still has to arrive before the zoom bites, or the camera slides
+  // sideways into its target instead of scaling straight at it (Cap calls this
+  // CENTER_PREAIM). So it starts at the same instant and simply ramps faster:
+  // aim is in place at click+0.25s, depth arrives at click+0.55s.
   const aims = moves.map((mv) => smooth(trapezoid(
-    (mv.startMs / 1000) - aimLead, (mv.endMs / 1000) + ramp, ramp * 0.9, ramp)));
+    mv.startMs / 1000, (mv.endMs / 1000) + ramp, ramp * 0.45, ramp)));
 
   // A move holds ONE depth - the shallowest its targets need, so every target
   // fits inside the crop as the camera pans between them.
@@ -558,10 +581,18 @@ export function buildGraph({
 export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ...opts }) {
   mkdirSync(assetDir, { recursive: true });
   const man = JSON.parse(readFileSync(join(shotDir, 'manifest.json'), 'utf8'));
-  const { width: srcW, height: srcH } = man;
+  const { width: srcW } = man;
+  // The window manager's title bar, measured at capture time. It is cropped off
+  // and macOS buttons go on the tab strip instead, so the window matches the
+  // desktop behind it - everything downstream works on the TRIMMED height.
+  const trimTop = opts.trimTop != null ? Number(opts.trimTop) : Number(man.deco?.top || 0);
+  const macLights = opts.macLights !== false && trimTop > 0;
+  // A real macOS title bar is a little taller than MATE's.
+  const barH = macLights ? (Math.round(man.height * 0.0235) & ~1) : 0;
+  const srcH = man.height - trimTop + barH;
   // Frames are device pixels, click coords are CSS pixels.
   const dsf = man.dsf ?? 1;
-  const clicks = man.clicks.map((c) => ({ ...c, x: c.x * dsf, y: c.y * dsf }));
+  const clicks = man.clicks.map((c) => ({ ...c, x: c.x * dsf, y: (c.y - trimTop + barH) * dsf }));
   const outW = opts.outW ?? srcW, outH = opts.outH ?? srcH;
 
   // mirror buildGraph's fit so the mask and shadow match the window exactly
@@ -621,9 +652,19 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   // file: change it and re-render, no recording involved.
   const edlPath = join(shotDir, 'edit.json');
   const edl = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : null;
+  // Camera targets were solved against the untrimmed frame; shift them up by
+  // the strip that is no longer there, or every push aims 32px low.
+  if (edl && trimTop) {
+    for (const c of edl.chains || []) for (const t of c.targets) t.rect = [t.rect[0], t.rect[1] - trimTop + barH, t.rect[2], t.rect[3]];
+    for (const z of edl.zooms || []) if (z.rect) z.rect = [z.rect[0], z.rect[1] - trimTop + barH, z.rect[2], z.rect[3]];
+  }
+  const bar = macLights
+    ? await makeTitleBar({ dir: assetDir, w: even(srcW), h: barH, frame: firstFrame })
+    : null;
+
   const graph = buildGraph({
     srcW, srcH, outW, outH, fps, clicks,
-    pad, ...opts, backdrop, edl,
+    pad, ...opts, trimTop, barH, macLights, backdrop, edl,
   });
   const gp = join(assetDir, 'graph.txt');
   writeFileSync(gp, graph);
@@ -633,6 +674,7 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
     '-f', 'concat', '-safe', '0', '-i', lp,
     '-i', mask, '-i', shadow,
     ...(backdrop ? ['-i', backdrop] : []),
+    ...(bar ? ['-i', bar] : []),
     '-filter_complex_script', gp, '-map', '[out]',
     '-c:v', 'libx264', '-preset', 'slower', '-crf', String(crf),
     '-x264-params', 'aq-mode=3:psy-rd=0.4:deblock=-1,-1',
@@ -641,6 +683,47 @@ export async function render({ shotDir, output, assetDir, fps = 30, crf = 15, ..
   return { output, srcW, srcH, outW, outH, frames: man.frames.length, clicks,
     backdrop: bgSpec, zooms: edl ? edl.zooms.length : clicks.length,
     moves: edl && edl.chains ? edl.chains.length : null, graphLength: graph.length };
+}
+
+/**
+ * The three macOS window buttons, to be laid over the left of the tab strip.
+ *
+ * The container films a Linux window: a MATE title bar, then Chromium's tab
+ * strip. Composited onto a macOS wallpaper the result is incoherent - a real
+ * window, of the wrong operating system, and that mismatch is what reads as
+ * fake even though nothing about it is drawn.
+ *
+ * On macOS the lights ARE the left of the tab strip; there is no separate bar.
+ * So the WM bar is cropped away and these go where they belong. Same
+ * measurements as the terminal chrome: 12pt across, 20pt apart, 20pt in.
+ */
+export async function makeTitleBar({ dir, w, h, frame }) {
+  const p = join(dir, `macbar-${w}x${h}.png`);
+  if (existsSync(p)) return p;
+  // Match the bar to the browser's own tab strip, sampled from the recording,
+  // so it reads as one window rather than a strip glued on top.
+  const py = `
+from PIL import Image, ImageDraw
+src = Image.open(${JSON.stringify(frame)}).convert("RGB")
+w, h = ${w}, ${h}
+# a point inside the tab strip, clear of the tab itself
+bg = src.getpixel((int(src.width * 0.80), min(src.height - 1, int(h * 1.4))))
+im = Image.new("RGB", (w, h), bg)
+d = ImageDraw.Draw(im)
+# the faint top highlight and the hairline under the bar, as on a real window
+d.line([(0, 0), (w, 0)], fill=tuple(min(255, c + 14) for c in bg))
+d.line([(0, h - 1), (w, h - 1)], fill=tuple(max(0, c - 26) for c in bg))
+dia = h * 12 / 28.0
+gap = h * 20 / 28.0
+for i, col in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
+    cx = gap + i * gap
+    cy = h / 2.0
+    r = dia / 2.0
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col,
+              outline=tuple(int(c * 0.82) for c in col), width=max(1, int(h * 0.014)))
+im.save(${JSON.stringify(p)})`;
+  await run('python3', ['-c', py]);
+  return p;
 }
 
 export async function makeAssets({ dir, w, h, radius = 18, pad = 40, shadowAlpha = 110, shadowBlur = 22, shadowDy = 14 }) {
