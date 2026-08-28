@@ -126,9 +126,9 @@ const r = await render({
   openPull: Number(arg('pull', '1.28')),
   openMs: Number(arg('pullms', '1500')),
   bg: arg('bg', 'auto'),
-  bgBlur: Number(arg('bgblur', '0.004')),
-  bgSat: Number(arg('bgsat', '0.82')),
-  bgDim2: Number(arg('bgdim', '0.92')),
+  bgBlur: Number(arg('bgblur', '0.016')),
+  bgSat: Number(arg('bgsat', '1.12')),
+  bgDim2: Number(arg('bgdim', '1.0')),
 });
 console.log(`composited ${r.frames} frames @ ${r.srcW}x${r.srcH}, ${r.zooms} zoom(s), backdrop=${r.backdrop}`);
 

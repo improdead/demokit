@@ -135,23 +135,35 @@ print(sum(px) / len(px))`;
   const { stdout } = await run('python3', ['-c', py]);
   const lum = parseFloat(stdout.trim());
   // A background exists to SEPARATE, not to blend - so pick by contrast against
-  // what was actually recorded.
+  // what was actually recorded, and prefer the real macOS wallpapers when they
+  // are on disk. These are what the look being copied actually sits on.
   //
-  // This used to return a macOS wallpaper unconditionally whenever one was on
-  // disk, on the theory that the generated grounds receded too hard to read as
-  // anything but a gradient. That was wrong twice over: a blurred photograph of
-  // a real place is muddy and low-contrast behind a white UI, and `dusk` put
-  // side by side with it is plainly the more vivid of the two. A photograph also
-  // brings shapes that compete with the window - paint-harbour behind this app
-  // reads as a second subject.
-  //
-  // Saturated gradients win under both light and dark UIs; the choice is only
-  // about which direction has room.
+  // An earlier version rejected them as muddy. That was true of the picture it
+  // was producing and false of the wallpaper: the treatment was blurring 0.4%,
+  // desaturating to 0.82 and dimming to 0.92, which turns any photograph into
+  // grey soup. Blurred harder and left saturated, the same file reads as a
+  // macOS desktop. The generated gradients remain as a fallback and for anyone
+  // who wants no photograph at all.
+  const wall = (n) => {
+    const p = join(dir0, '.cache', 'wallpapers', n);
+    return existsSync(p) ? p : null;
+  };
+  // Sonoma is bright, so it sits under a dark app; the radial fan is dark and
+  // sits under a light one.
+  const pick = lum < 90 ? wall('mac-sonoma.png')
+    : lum > 150 ? (wall('mac-radial-sky-blue.png') || wall('mac-sonoma.png'))
+    : wall('mac-sonoma.png');
+  if (pick) return pick;
   return lum > 150 ? 'dusk' : lum < 70 ? 'linen' : 'tide';
 }
 
 /** @param spec  "dusk" | "#101010" | "/path/to/wallpaper.png" | "blur" */
-export async function makeBackdrop({ dir, w, h, spec, treatBlur = 0.004, treatSat = 0.82, treatDim = 0.92 }) {
+// Treatment defaults for a photographic ground. Blur HARD - the point is a
+// surface, not a picture, and a soft field of colour is what reads as depth.
+// Do not desaturate: that is what made every wallpaper look like grey soup, and
+// it is the reason the generated gradients briefly won a comparison they should
+// have lost.
+export async function makeBackdrop({ dir, w, h, spec, treatBlur = 0.016, treatSat = 1.12, treatDim = 1.0 }) {
   mkdirSync(dir, { recursive: true });
   const key = (spec.replace(/[^a-z0-9]/gi, '_') + `_${treatBlur}_${treatSat}_${treatDim}`).slice(-90);
   const out = join(dir, `bg-${key}-${w}x${h}.png`);

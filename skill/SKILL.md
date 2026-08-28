@@ -486,6 +486,32 @@ display is 1% of the frame height. `XCURSOR_THEME=Adwaita` and `XCURSOR_SIZE`
 at ~2.8% of display height fix that, and Chromium reads both at startup, so they
 have to be set on its launch line.
 
+## 8c2. The terminal window is drawn, and it has to be drawn correctly
+
+A terminal capture is a REAL pty running the REAL command — every character is
+that command's actual output, nothing is simulated. What is drawn is the window
+around it: `src/term.py` paints the chrome with PIL rather than screen-recording
+Terminal.app, because a real recording brings the desktop, the notch, whatever
+tabs are open, and a font size chosen for reading rather than filming.
+
+Drawn chrome only works if the proportions are right. macOS measurements, all
+against a 28pt title bar:
+
+| part | value |
+|---|---|
+| traffic lights | 12pt across, 20pt apart, first centre 20pt from the left |
+| light colours | `#FF5F57` `#FEBC2E` `#28C840`, each with a ~18%-darker ring |
+| title | SF Pro at 13pt — never the terminal's own monospace font |
+| title bar | **lighter** than the window body in dark mode, with a top highlight and a hairline separator below |
+| body font | SF Mono, which is what Terminal.app actually renders in |
+
+That inversion — the bar being lighter than the body, not darker — is most of
+what makes a drawn window read as a Mac.
+
+One trap: SF Mono has no `❯` (U+276F), so the prompt character of most shells
+renders as *nothing at all*. Glyph coverage is checked per character with a
+fallback to Menlo rather than picking one font and losing glyphs either way.
+
 ## 8c. The frame — a window floating on a ground
 
 The look is a real window, centred, with room around it, sitting on a saturated
@@ -499,16 +525,20 @@ almost right:
 | `--bg` | `auto` | see below |
 
 **Pick the ground by contrast, not by taste.** `auto` measures how bright the
-recording is and picks the opposite: a light app gets `dusk`, a dark one gets
-`linen`, anything in between gets `tide`.
+recording is and picks the opposite: a dark app gets the bright Sonoma
+wallpaper, a light one gets the dark radial fan, and the generated gradients
+(`dusk`, `linen`, `tide`) are the fallback when no wallpaper is on disk.
 
-Two things that read as "nice backdrop" and are not:
+**Blur hard, and never desaturate.** The ground is a surface, not a picture. An
+earlier version of this rejected the macOS wallpapers as muddy — which was true
+of the image it was producing and false of the wallpaper: it was blurring 0.4%,
+desaturating to 0.82 and dimming to 0.92, and that turns any photograph into grey
+soup. At `--bgblur 0.016 --bgsat 1.12 --bgdim 1.0` the same file reads as a macOS
+desktop. Defaults now.
 
-- **A blurred photograph of a real place.** It is muddy and low-contrast behind a
-  white UI, and `dusk` beside it is plainly more vivid. `auto` used to return a
-  macOS wallpaper unconditionally and that is exactly what it looked like.
-- **A photograph with shapes in it.** `paint-harbour` behind a findings table
-  reads as a second subject. The window is the subject.
+Still true: **a photograph with shapes in it competes with the window.**
+`paint-harbour` behind a findings table reads as a second subject, and blurring
+is what stops a wallpaper doing the same. The window is the subject.
 
 The shadow and corner radius scale with the source width, so they hold at 4K
 without being touched.

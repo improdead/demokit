@@ -33,7 +33,11 @@ from PIL import Image, ImageDraw, ImageFont
 # One dark theme, tuned so the ANSI colours stay legible after x264.
 THEME = {
     "bg": (22, 24, 30), "fg": (222, 228, 236), "dim": (128, 138, 152),
-    "chrome": (32, 35, 43), "title": (150, 158, 170),
+    # A macOS dark title bar is LIGHTER than the window body, not darker, and it
+    # carries a top highlight and a hairline separator at the bottom. Getting
+    # that inversion wrong is most of why a drawn window reads as "not a Mac".
+    "chrome": (58, 58, 61), "chrome2": (48, 48, 51), "sep": (16, 17, 20),
+    "title": (198, 198, 202),
     "ansi": [
         (60, 64, 74), (233, 105, 106), (126, 199, 130), (222, 178, 92),
         (109, 163, 232), (186, 137, 226), (95, 191, 197), (200, 206, 214),
@@ -41,7 +45,14 @@ THEME = {
         (140, 186, 244), (206, 167, 240), (128, 214, 219), (236, 240, 246),
     ],
 }
-FONT_CANDIDATES = ["/System/Library/Fonts/Menlo.ttc", "/System/Library/Fonts/Monaco.ttf"]
+# SF Mono is what Terminal.app actually renders in on a modern macOS; Menlo was
+# the default before it and is the fallback.
+FONT_CANDIDATES = ["/System/Library/Fonts/SFNSMono.ttf",
+                   "/System/Library/Fonts/Menlo.ttc",
+                   "/System/Library/Fonts/Monaco.ttf"]
+# SF Pro. The title of a macOS window is never set in the terminal's own font.
+UI_FONT_CANDIDATES = ["/System/Library/Fonts/SFNS.ttf",
+                      "/System/Library/Fonts/HelveticaNeue.ttc"]
 
 
 class Screen:
@@ -250,10 +261,17 @@ def render(snaps, out_dir, cols, rows, width, title):
             break
     else:
         raise SystemExit("term: no monospace font found")
+    ui_font_path = next((p for p in UI_FONT_CANDIDATES if os.path.exists(p)), font_path)
+    # SF Mono covers no box-drawing arrows: the prompt character a lot of shells
+    # use, U+276F, renders as nothing at all. Menlo has it. Rather than pick one
+    # font and lose glyphs either way, fall back per character.
+    fb_path = next((p for p in ("/System/Library/Fonts/Menlo.ttc",
+                                "/System/Library/Fonts/Monaco.ttf")
+                    if os.path.exists(p) and p != font_path), None)
 
     # Size the glyph so `cols` columns fill the text area exactly.
     pad = round(width * 0.028)
-    chrome_h = round(width * 0.021)
+    chrome_h = round(width * 0.0235)   # ~28pt against the text size below
     size = 8
     while True:
         f = ImageFont.truetype(font_path, size)
@@ -264,6 +282,21 @@ def render(snaps, out_dir, cols, rows, width, title):
         size += 1
     font = ImageFont.truetype(font_path, size)
     bold = ImageFont.truetype(font_path, size)      # Menlo.ttc index 0 is regular
+    fallback = ImageFont.truetype(fb_path, size) if fb_path else None
+
+    _cov = {}
+
+    def font_for(ch):
+        """The font that can actually draw this character."""
+        if ord(ch) < 128 or fallback is None:
+            return None
+        hit = _cov.get(ch)
+        if hit is None:
+            probe = Image.new("L", (size * 2 + 8, size * 2 + 8), 0)
+            ImageDraw.Draw(probe).text((2, 2), ch, font=font, fill=255)
+            hit = probe.getbbox() is not None
+            _cov[ch] = hit
+        return None if hit else fallback
     cw = font.getlength("M")
     asc, desc = font.getmetrics()
     ch = asc + desc + max(1, round(size * 0.22))
@@ -275,13 +308,27 @@ def render(snaps, out_dir, cols, rows, width, title):
     for n, (_ms, grid) in enumerate(snaps):
         im = Image.new("RGB", (W, height), T["bg"])
         d = ImageDraw.Draw(im)
-        d.rectangle([0, 0, W, chrome_h], fill=T["chrome"])
-        r = chrome_h * 0.22
-        for i, col in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
-            cx = chrome_h * 0.75 + i * chrome_h * 0.62
-            d.ellipse([cx - r, chrome_h / 2 - r, cx + r, chrome_h / 2 + r], fill=col)
-        tf = ImageFont.truetype(font_path, max(9, round(chrome_h * 0.36)))
-        d.text((W / 2, chrome_h / 2), title, font=tf, fill=T["title"], anchor="mm")
+
+        # Title bar, to macOS proportions. Everything here is a fraction of the
+        # bar height, because the real measurements are in points against a 28pt
+        # bar: 12pt lights, 20pt apart, 20pt in from the left, 13pt title.
+        for yy in range(chrome_h):
+            t = yy / max(1, chrome_h - 1)
+            d.line([(0, yy), (W, yy)], fill=tuple(
+                round(T["chrome"][k] + (T["chrome2"][k] - T["chrome"][k]) * t) for k in range(3)))
+        d.line([(0, chrome_h - 1), (W, chrome_h - 1)], fill=T["sep"])
+
+        r = chrome_h * (12 / 28) / 2
+        ring = max(1, round(chrome_h * 0.014))
+        for i, col in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
+            cx = chrome_h * (20 / 28) + i * chrome_h * (20 / 28)
+            cy = chrome_h / 2
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col,
+                      outline=tuple(round(c * 0.82) for c in col), width=ring)
+
+        tf = ImageFont.truetype(ui_font_path, max(9, round(chrome_h * (13 / 28))))
+        d.text((W / 2, chrome_h / 2 - chrome_h * 0.02), title,
+               font=tf, fill=T["title"], anchor="mm")
 
         y0 = chrome_h + pad
         for ry, row in enumerate(grid):
@@ -292,7 +339,7 @@ def render(snaps, out_dir, cols, rows, width, title):
                 if c == " ":
                     continue
                 col = T["ansi"][fg] if fg is not None else (T["dim"] if dm else T["fg"])
-                d.text((pad + rx * cw, y), c, font=bold if bd else font, fill=col)
+                d.text((pad + rx * cw, y), c, font=(font_for(c) or (bold if bd else font)), fill=col)
         im.save(os.path.join(out_dir, "f%05d.png" % n))
     return W, height
 
