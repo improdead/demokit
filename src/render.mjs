@@ -478,9 +478,7 @@ export function buildGraph({
     // and the depth needed here was about 5x.
     const off = Math.round(Math.hypot(cx - tx, cy - ty));
     if (off > compW * maxOffFrac) {
-      console.log(`  not moving for "${zm.reason}": it sits ${off}px from any framing `
-        + `that keeps the window full, so the push would land off its own subject`);
-      return { z: 1, cx: wcx, cy: wcy };
+      return { z: 1, cx: wcx, cy: wcy, unframable: true, reason: zm.reason, off };
     }
     if (off > compW * 0.02) {
       console.log(`  NOTE: "${zm.reason}" framed ${off}px off the cursor - it sits `
@@ -492,8 +490,28 @@ export function buildGraph({
   // Group targets into camera MOVES: one zoom in, pan between targets while
   // held, one zoom out. Popping out to full frame between every click is what
   // makes the camera bob.
+  // Drop a target the camera cannot frame - do NOT let it drop the move.
+  //
+  // Cap merges nearby clicks into one segment with several focus points, and
+  // the depth of a move is the shallowest its targets need. So a single
+  // unframable focus point (one click too near the window edge) was collapsing
+  // the entire merged segment to 1x: the take came back with no camera movement
+  // at all and nothing said why.
+  const keepFramable = (targets, reason) => {
+    const ok = targets.filter((t) => !t.unframable);
+    for (const t of targets) {
+      if (!t.unframable) continue;
+      console.log(ok.length
+        ? `  skipping one focus point in "${t.reason}": ${t.off}px from any framing that `
+          + `keeps the window full - the rest of the segment still moves`
+        : `  not moving for "${t.reason}": it sits ${t.off}px from any framing that keeps `
+          + `the window full, so the push would land off its own subject`);
+    }
+    return ok.length ? ok : targets;
+  };
   const moves = chains
-    ? chains.map((c) => ({ startMs: c.startMs, endMs: c.endMs, targets: c.targets.map(solve).map((s, i) => ({ ...s, tMs: c.targets[i].tMs })) }))
+    ? chains.map((c) => ({ startMs: c.startMs, endMs: c.endMs,
+        targets: keepFramable(c.targets.map(solve).map((s, i) => ({ ...s, tMs: c.targets[i].tMs })), c.reason) }))
     : zooms.map((zm) => {
         const s = solve(zm);
         const h = (zm.holdMs ?? hold * 1000);
