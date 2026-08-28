@@ -1,0 +1,60 @@
+{
+  "claim": "An engineer who merges a dozen PRs a week and has never had a security review on any of them will believe Trident reviews every pull request automatically and tells them what is new versus what was already there.",
+  "_ledger": [
+    "S0  the project, 8 repositories, 1 of them under review    <- where the viewer starts",
+    "S1  Repositories: esprit-labs/Trident, 100 PR reviews      <- click Repositories",
+    "S2  the review history, newest 2h ago, each one Succeeded  <- click 100 PR reviews",
+    "S3  one review open: files changed, commit, the findings   <- click the newest review"
+  ],
+  "url": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+  "probe": "[role=\"row\"], tbody tr, button[aria-expanded]",
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 7000,
+  "tailMs": 2600,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 1800
+    },
+    {
+      "do": "click",
+      "sel": "button:has-text(\"100 PR reviews\")",
+      "label": "open the review history",
+      "shows": "every pull request Trident has reviewed, newest first",
+      "ms": 2600,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Succeeded"
+        ]
+      },
+      "expect": {
+        "sel": "text=Succeeded",
+        "timeout": 12000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "button[aria-expanded]:has-text(\"#1159\")",
+      "label": "open one review",
+      "shows": "what that review found, and which of it was new",
+      "ms": 4200,
+      "findMs": 12000,
+      "prove": {
+        "textAppears": [
+          "files changed"
+        ]
+      },
+      "expect": {
+        "sel": "text=files changed",
+        "timeout": 12000
+      },
+      "later": true
+    }
+  ]
+}

@@ -35,7 +35,7 @@ try {
 }
 
 const run = promisify(execFile);
-const [, , flowPath, name, bin, winXs, winYs, dsfs, mode] = process.argv;
+const [, , flowPath, name, bin, winXs, winYs, dsfs, mode, decoTops, decoLefts] = process.argv;
 const PREPARE = mode === 'prepare';
 const winX = Number(winXs || 0), winY = Number(winYs || 0);
 // X11 works in DEVICE pixels; CDP bounding boxes are in CSS pixels. With a
@@ -119,9 +119,17 @@ if (PREPARE) {
 // is. Both terms matter: drop the window origin and every click lands offset by
 // wherever the window happens to sit; drop the chrome height and the visible
 // pointer sits a tab-strip above whatever it clicks.
-const chromeY = await page.evaluate(() => (window.outerHeight - window.innerHeight)) * DSF;
-const chromeX = await page.evaluate(() => Math.max(0, (window.outerWidth - window.innerWidth) / 2)) * DSF;
-console.log(`boxflow: window at ${winX},${winY} + chrome offset ${chromeX},${chromeY}`);
+// Two separate chromes sit above the page, and BOTH have to be counted.
+// Chromium's own (tab strip + address bar) is what outerHeight-innerHeight
+// measures, in CSS pixels. The window manager's title bar is not in that number
+// at all - Chromium does not know about it - but the captured frame starts at
+// the top of it. Leaving it out put every click ~30 device px too high, which a
+// 48px chip absorbs and a 16px disclosure button does not.
+const DECO_TOP = Number(decoTops || 0), DECO_LEFT = Number(decoLefts || 0);
+const chromeY = DECO_TOP + (await page.evaluate(() => (window.outerHeight - window.innerHeight))) * DSF;
+const chromeX = DECO_LEFT + (await page.evaluate(() => Math.max(0, (window.outerWidth - window.innerWidth) / 2))) * DSF;
+console.log(`boxflow: window at ${winX},${winY} + chrome ${chromeX},${chromeY} `
+  + `(wm decoration ${DECO_LEFT},${DECO_TOP})`);
 
 const toScreen = (x, y) => [Math.round(winX + chromeX + x * DSF), Math.round(winY + chromeY + y * DSF)];
 const smooth = (p) => p * p * p * (10 - 15 * p + 6 * p * p);
@@ -310,18 +318,37 @@ for (const s of flow.steps) {
         checks: [{ check: 'the step ran', ok: false, detail: `${s.sel} matched nothing - it was never performed` }] });
       continue;
     }
-    const [sx, sy] = toScreen(b.x + b.width / 2, b.y + b.height / 2);
+    let [sx, sy] = toScreen(b.x + b.width / 2, b.y + b.height / 2);
     const before = await snapshot();
     await glide(sx, sy);
     await page.waitForTimeout(s.settleMs ?? 380);
+
+    // Re-measure before committing the click. A second passes between finding
+    // the element and arriving at it, and a page that is still settling moves
+    // things in that window: this click landed 16px above a disclosure button
+    // because the row above it had grown, and the whole take then filmed a
+    // feature that never ran. The pointer is already close, so the correction
+    // is a short hop rather than a second approach.
+    const b2 = await loc.boundingBox({ timeout: 1200 }).catch(() => null);
+    if (b2) {
+      const [nx, ny] = toScreen(b2.x + b2.width / 2, b2.y + b2.height / 2);
+      const drift = Math.hypot(nx - sx, ny - sy);
+      if (drift > 6) {
+        console.log(`re-aimed (${label}): the target moved ${Math.round(drift)}px while the pointer travelled`);
+        await glide(nx, ny);
+        await page.waitForTimeout(180);
+        sx = nx; sy = ny;
+      }
+    }
     // Coordinates are stored relative to the captured WINDOW, because that is
     // what the frames contain - the desktop around it is never recorded.
+    const bb = b2 || b;
     const ev = {
       kind: s.do === 'hover' || s.do === 'move' ? 'hover' : (s.do === 'type' ? 'type' : 'click'),
       t: now(), label,
       x: Math.round(sx - winX), y: Math.round(sy - winY),
-      w: Math.round(b.width * DSF), h: Math.round(b.height * DSF),
-      bx: Math.round(b.x * DSF + chromeX), by: Math.round(b.y * DSF + chromeY),
+      w: Math.round(bb.width * DSF), h: Math.round(bb.height * DSF),
+      bx: Math.round(bb.x * DSF + chromeX), by: Math.round(bb.y * DSF + chromeY),
     };
     if (s.do === 'hover' || s.do === 'move') {
       if (s.beat !== false) events.push(ev);

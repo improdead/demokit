@@ -100,6 +100,7 @@ export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 30,
   await new Promise((r) => setTimeout(r, 9000));
 
   let geom = { x: 0, y: 0, w: W, h: H };
+  let deco = { top: 0, left: 0 };
   try {
     // 1. Its Chromium binds CDP to 127.0.0.1, which a published port cannot
     //    reach from the host. 2. It opens a file manager and a terminal that
@@ -183,10 +184,18 @@ while True:
        ext=$(xprop -id $id _NET_FRAME_EXTENTS 2>/dev/null | sed 's/.*= //' | tr -d ' ')
        L=\${ext%%,*}; ext=\${ext#*,}; R=\${ext%%,*}; ext=\${ext#*,}; T=\${ext%%,*}; B=\${ext#*,}
        L=\${L:-0}; R=\${R:-0}; T=\${T:-0}; B=\${B:-0}
-       echo "X=$((CX-L))"; echo "Y=$((CY-T))"; echo "WIDTH=$((CW+L+R))"; echo "HEIGHT=$((CH+T+B))"`]);
+       echo "X=$((CX-L))"; echo "Y=$((CY-T))"; echo "WIDTH=$((CW+L+R))"; echo "HEIGHT=$((CH+T+B))"
+       echo "TOP=$T"; echo "LEFT=$L"`]);
     const gv2 = Object.fromEntries(g.trim().split('\n').map((l) => l.trim().split('=')));
     const gx = Math.max(0, Number(gv2.X) || 0);
     const gy = Math.max(0, Number(gv2.Y) || 0);
+    // The WM's own title bar. The captured frame starts at the top of it, but
+    // Chromium's outerHeight does not include it - so page(0,0) sits this many
+    // pixels lower than winY + Chromium's chrome, and every click was landing
+    // that much too high. On targets 48px tall it went unnoticed; on a 16px
+    // disclosure button it missed completely and the take filmed a click that
+    // did nothing.
+    deco = { top: Number(gv2.TOP) || 0, left: Number(gv2.LEFT) || 0 };
     geom = {
       x: gx, y: gy,
       w: Math.min(Number(gv2.WIDTH) || wW, W - gx) & ~1,
@@ -200,7 +209,8 @@ while True:
     // and a half-failed flow still produced a video.
     const prep = await new Promise((res) => {
       const p = spawn('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
-        String(geom.x), String(geom.y), String(dsf), 'prepare'], { stdio: 'inherit',
+        String(geom.x), String(geom.y), String(dsf), 'prepare',
+        String(deco.top), String(deco.left)], { stdio: 'inherit',
         env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '',
                DEMOKIT_COOKIES: process.env.DEMOKIT_COOKIES || '' } });
       p.on('exit', (c) => res(c ?? 1));
@@ -230,7 +240,8 @@ while True:
     // was being swallowed. spawn actually inherits.
     await new Promise((res) => {
       const p = spawn('node', [join(here, 'src', 'boxflow.mjs'), flowPath, name, bin,
-        String(geom.x), String(geom.y), String(dsf)], { stdio: 'inherit',
+        String(geom.x), String(geom.y), String(dsf), 'run',
+        String(deco.top), String(deco.left)], { stdio: 'inherit',
         env: { ...process.env, DEMOKIT_PW: process.env.DEMOKIT_PW || '',
                DEMOKIT_COOKIES: process.env.DEMOKIT_COOKIES || '',
                DEMOKIT_EVENTS: join(shotDir, 'boxevents.json') } });

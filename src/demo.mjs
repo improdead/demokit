@@ -33,7 +33,7 @@ if (!shotArg || !outArg) {
 // re-renders (the autotuner especially) silently drops --w/--bg/--chrome and
 // hands back a 1080p demo on a default background. Idea taken from DemoTape's
 // recipe.json: change a field, re-render, footage identical.
-const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'edgesnap', 'gap', 'keep', 'speed',
+const RECIPE_KEYS = ['w', 'h', 'level', 'deep', 'inset', 'bias', 'edgesnap', 'maxoff', 'gap', 'keep', 'speed',
   'bg', 'bgblur', 'bgsat', 'bgdim', 'chrome', 'tabs', 'chrome-theme', 'pull', 'pullms', 'pad'];
 const arg0 = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
 const shotDir = resolve(shotArg), outPath = resolve(outArg);
@@ -121,6 +121,7 @@ const r = await render({
   inset: Number(arg('inset', '0.72')),
   centerBias: Number(arg('bias', '0')),
   edgeSnap: Number(arg('edgesnap', '0')),
+  maxOffFrac: Number(arg('maxoff', '0.055')),
   minGapMs: Number(arg('gap', '1500')),
   maxLevel: Number(arg('deep', '1.7')),
   openPull: Number(arg('pull', '1.28')),

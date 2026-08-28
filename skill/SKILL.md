@@ -430,6 +430,12 @@ justified individually. It still read as arbitrary, because *defensible* and
 camera that moves when they clicked and is still the rest of the time, or they
 see one that wanders.
 
+- **If the camera cannot frame it, it does not move.** A click near a window edge
+  cannot be centred at any sensible depth — the crop would hang off the window
+  and fill with backdrop — and past `--maxoff` (5.5% of frame width) the push
+  visibly misses its own subject. A still frame beats that. Depth does not
+  rescue it either: a deeper zoom has *more* reach, and the depth needed in the
+  case that prompted this was about 5x.
 - `--zoom 2.2` sets the depth. Every push is the same distance, so the rhythm is
   predictable rather than a series of different-sized surprises.
 - Two clicks closer than `minGapMs` produce one push, not two.
@@ -582,6 +588,35 @@ is what stops a wallpaper doing the same. The window is the subject.
 
 The shadow and corner radius scale with the source width, so they hold at 4K
 without being touched.
+
+## 8a2. Two chromes sit above the page, and both must be counted
+
+In the container the pointer is moved by xdotool in SCREEN coordinates while CDP
+reports element boxes in PAGE coordinates. Converting between them means adding
+everything that sits above the page:
+
+```
+page (0,0) in the captured frame
+  = the window manager's title bar        <- _NET_FRAME_EXTENTS
+  + Chromium's own chrome                 <- (outerHeight - innerHeight) x dsf
+```
+
+The second term is the obvious one and was the only one being added. Chromium
+does not know about the WM's title bar, so `outerHeight` excludes it — but the
+captured frame *starts* at the top of it. That put **every click 32 device
+pixels too high**.
+
+Which is exactly the kind of bug that hides. A 48px filter chip absorbs a 32px
+error and still registers, so three takes in a row looked fine. A 16px
+disclosure button does not, and the take filmed a click that did nothing.
+
+It also produced a false accusation about the product: the verification pass
+correctly reported that clicking a filter chip changed nothing on screen, and
+the conclusion drawn was that the chip might be broken. The chip was fine. **A
+verified "this step did nothing" says the pixels did not move — it does not say
+whose fault that is.** Check the click landed before blaming the app: draw the
+recorded click point and the measured element box onto the frame at that
+timestamp and look at whether they agree with what is rendered.
 
 ## 8b. Beats without a cursor
 

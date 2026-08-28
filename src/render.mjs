@@ -317,7 +317,7 @@ export function buildGraph({
   // arbitrary. The cursor is the subject; blending away from it is a choice
   // that has to be asked for.
   inset = 0.8, level = 1.4, ramp = 0.55, hold = 0.9, centerBias = 0, minGapMs = 1500,
-  edgeSnap = 0,
+  edgeSnap = 0, maxOffFrac = 0.055,
   blurSigma = 46, bgDim = 0.06, bgSat = 0.85, pad, rippleSize, backdrop = null,
   minLevel = 1.22, maxLevel = 1.7, openPull = 1.28, openMs = 1500, edl = null, panMs = 420,
 }) {
@@ -450,9 +450,20 @@ export function buildGraph({
     };
     const cx = place(tx, loX, hiX, ox, fgW, wcx);
     const cy = place(ty, loY, hiY, oy, fgH, wcy);
-    // Say when the frame could not be centred on the cursor. The offset is not a
-    // bug - it is the window edge - but an unexplained one reads as a mis-aim.
+    // If the camera cannot actually frame the target, it does not move.
+    //
+    // A click close to a window edge cannot be centred at any sensible depth -
+    // the crop would have to hang off the window and fill with backdrop. The
+    // clamp keeps the frame clean, but past a point the result is a push that
+    // visibly misses its subject, and a still frame beats that every time. Note
+    // that depth does not rescue this: a DEEPER zoom has more reach, not less,
+    // and the depth needed here was about 5x.
     const off = Math.round(Math.hypot(cx - tx, cy - ty));
+    if (off > compW * maxOffFrac) {
+      console.log(`  not moving for "${zm.reason}": it sits ${off}px from any framing `
+        + `that keeps the window full, so the push would land off its own subject`);
+      return { z: 1, cx: wcx, cy: wcy };
+    }
     if (off > compW * 0.02) {
       console.log(`  NOTE: "${zm.reason}" framed ${off}px off the cursor - it sits `
         + `within half a frame of the window edge, so centring would show backdrop`);
