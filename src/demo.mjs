@@ -76,8 +76,8 @@ if (arg('edit', 'auto') !== 'off') {
       minGapMs: Number(arg('gap', '1800')),
       padFrac: Number(arg('pad', '0.55')),
       mode: rest.includes('--smart') ? 'smart'
-        : rest.includes('--cap') ? 'cap'
-        : rest.includes('--zoom-clicks') ? 'clicks' : 'still',
+        : rest.includes('--still') ? 'still'
+        : rest.includes('--zoom-clicks') ? 'clicks' : 'cap',
     });
     for (const w of edl.warnings || []) console.log(`edit: ! ${w}`);
     if (edl.mode === 'still') console.log('edit: still camera - it does not move');

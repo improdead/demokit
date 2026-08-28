@@ -15,7 +15,14 @@ OUT = os.path.join(SHOT, "frames-cur")
 MAN = json.load(open(os.path.join(SHOT, "manifest.json")))
 
 SCALE = MAN["width"] / 1920.0
-CUR_H = max(28, int(round(34 * SCALE)))
+# A cursor a viewer can actually follow. The X11 default is ~1% of the frame
+# height at 4K, which is a smudge; the reference demos run about 4.5%.
+CUR_H = max(28, int(round(MAN["height"] * 0.045)))
+# Cap's own cursor: black arrow, white outline. Real recordings ship a cursor
+# image rather than drawing one, and it is the shape people recognise.
+CUR_ASSET = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "..", "vendor", "Cap", "apps", "cli", "skill",
+                         "cap-demo", "assets", "cursor_0.png")
 RIPPLE_MS = 460
 RIPPLE_MAX = max(18, int(round(34 * SCALE)))
 ACCENT = (79, 107, 61)
@@ -39,7 +46,33 @@ def make_cursor(h):
     return Image.alpha_composite(sh, im), pad, pad
 
 
-CURSOR, HX, HY = make_cursor(CUR_H)
+def load_cursor(h):
+    """Cap's cursor PNG, trimmed to its ink and scaled, with the tip as hotspot."""
+    im = Image.open(CUR_ASSET).convert("RGBA")
+    bbox = im.getbbox()
+    im = im.crop(bbox)
+    scale = h / float(im.height)
+    im = im.resize((max(1, int(round(im.width * scale))), h), Image.LANCZOS)
+    # The hotspot is the tip: the topmost row with ink, at its centre.
+    a = im.split()[3].load()
+    hx = 0
+    for x in range(im.width):
+        if a[x, 0] > 16:
+            hx = x
+            break
+    else:
+        for y in range(im.height):
+            row = [x for x in range(im.width) if a[x, y] > 16]
+            if row:
+                hx = row[0]
+                break
+    return im, hx, 0
+
+
+if os.path.exists(CUR_ASSET):
+    CURSOR, HX, HY = load_cursor(CUR_H)
+else:
+    CURSOR, HX, HY = make_cursor(CUR_H)
 PRESSED = CURSOR.resize((int(CURSOR.width * 0.88), int(CURSOR.height * 0.88)), Image.LANCZOS)
 
 PATH = MAN.get("path") or []

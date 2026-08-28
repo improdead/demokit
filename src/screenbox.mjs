@@ -72,7 +72,8 @@ export async function buildImage(bin, contextDir) {
 const dexec = (bin, name, args, opts = {}) =>
   run(bin, ['exec', '-e', `DISPLAY=${DISPLAY}`, name, ...args], { maxBuffer: 1 << 26, ...opts });
 
-export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 30, keep = false, dsf = 2 }) {
+export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 30,
+                               keep = false, dsf = 2, drawMouse = false }) {
   const pre = await preflight();
   if (!pre.ok) {
     for (const p of pre.problems) console.error('screenbox: ' + p);
@@ -221,7 +222,10 @@ while True:
     // `docker exec ... "cmd &"` does not survive: the backgrounded process dies
     // with the exec session. -d detaches it properly.
     await run(bin, ['exec', '-d', '-e', `DISPLAY=${DISPLAY}`, name, 'bash', '-c',
-      `ffmpeg -y -f x11grab -draw_mouse 1 -framerate ${fps} `
+      // -draw_mouse 0: the X11 cursor is a white arrow no theme makes black, and
+      // at 4K it is about 1% of the frame height. Cap's cursor is drawn on
+      // instead, from the recorded pointer track.
+      `ffmpeg -y -f x11grab -draw_mouse ${drawMouse ? 1 : 0} -framerate ${fps} `
       + `-video_size ${geom.w}x${geom.h} -i '${DISPLAY}.0+${geom.x},${geom.y}' `
       + `-c:v libx264 -preset ultrafast -qp 0 /tmp/box.mkv > /tmp/ff.log 2>&1`]);
     await new Promise((r) => setTimeout(r, 1500));
@@ -339,7 +343,23 @@ while True:
         // Dropping it entirely was the bug - the director then had nothing to
         // follow and fell back to element boxes.
         ? { frames, events: evt.events, clicks: evt.events, actions: evt.actions,
-            proof: evt.proof || [], path: [], pointer: evt.path || [],
+            proof: evt.proof || [], pointer: evt.path || [],
+            // The pointer is sampled only while it is MOVING, so a gap between
+            // two glides interpolates straight through and the drawn cursor
+            // drifts slowly across the screen while it should be sitting still.
+            // Repeat the last position at the end of every gap.
+            path: drawMouse ? [] : (() => {
+              const p = evt.path || [];
+              const out = [];
+              for (let i = 0; i < p.length; i++) {
+                out.push(p[i]);
+                const nxt = p[i + 1];
+                if (nxt && nxt.t - p[i].t > 200) out.push({ x: p[i].x, y: p[i].y, t: nxt.t - 1 });
+              }
+              if (out.length) out.push({ x: out.at(-1).x, y: out.at(-1).y,
+                                         ms: undefined, t: (evt.endMs || out.at(-1).t) });
+              return out;
+            })(),
             sync: { flashIdx, shift } }
         : { frames, clicks: [], path: [], actions: [] }),
     }, null, 1));
@@ -361,6 +381,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const r = await capture({
     shotDir, flowPath: arg('flow'), size: arg('size', '4288x2560'),
     fps: Number(arg('fps', '30')), dsf: Number(arg('dsf', '2')), keep: rest.includes('--keep'),
+    drawMouse: rest.includes('--x11-cursor'),
   });
   console.log(`screenbox: ${r.frames} frames @ ${r.width}x${r.height} -> ${shotDir}`);
 }
