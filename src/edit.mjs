@@ -56,7 +56,7 @@ const DEFAULTS = {
   minHoldMs: 900,        // never shorter than this once the camera has moved
   settleMs: 700,         // linger this long after the last thing that moved
   maxTargets: 3,
-  mode: 'clicks',        // 'clicks' = one push per click; 'smart' = the full director
+  mode: 'cap',           // 'cap' = Cap's auto-zoom, ported; 'still' = never moves; 'clicks'; 'smart'
   // Fixed depth, so every push reads the same - but the value is not a taste
   // setting. Depth is what BUYS centring: the camera can only move the crop
   // within `window - canvas/z`, so at 1.85 only a click in the middle 20% of
@@ -142,6 +142,133 @@ print(json.dumps({"track": out, "ink": inks}))`;
  * when they clicked and is still the rest of the time. So: clicks only,
  * anchored on the pointer, one fixed depth.
  */
+/**
+ * Cap's auto-zoom, ported.
+ *
+ * `generate_zoom_segments_from_clicks_impl` in apps/desktop/src-tauri/src/
+ * recording.rs, with the focus logic from crates/rendering/src/zoom_spring.rs.
+ * Three cameras were written here before this one and all three were rejected;
+ * this is the one that ships in a product people use, so it is worth having
+ * exactly rather than approximately.
+ *
+ * What it does differently from what was here before, in order of how much it
+ * matters:
+ *
+ *  1. It MERGES. Clicks within 2.5s of each other become one segment, so a
+ *     burst of activity is a single sustained push instead of the camera
+ *     pumping in and out on every click. That is most of why Cap's zooms read
+ *     as calm and mine read as busy.
+ *  2. It HOLDS - 2500ms after the click, against the 1500 used here.
+ *  3. It FOLLOWS. Inside a segment the focus is the centre of the cursor's
+ *     current cluster, so the camera tracks the pointer instead of being nailed
+ *     to the click point for the whole hold.
+ *  4. It ignores clicks in the last second and ends segments 800ms before the
+ *     video does, so a take never finishes mid-push.
+ *
+ * The one thing not ported is the spring (stiffness 200, damping 40, mass 2.25,
+ * stepped at 125Hz). It smooths the transitions; reproducing it would mean
+ * baking a per-frame table into an ffmpeg expression. The smoothstep envelope
+ * stands in for it, and that is an approximation, not a port.
+ */
+const CAP = {
+  PRE_PADDING_MS: 300,
+  POST_PADDING_MS: 2500,
+  END_CLAMP_PADDING_MS: 800,
+  TRAILING_CLICK_IGNORE_MS: 1000,
+  MERGE_GAP_MS: 2500,
+  START_MIN_MS: 1,
+  AMOUNT: 2.0,
+  CLUSTER_W_RATIO: 0.5,      // of the visible zoomed viewport
+  CLUSTER_H_RATIO: 0.7,
+};
+
+/** Cap's greedy click-cluster: extend the box while it stays under the limit. */
+function buildClusters(pts, maxW, maxH) {
+  if (!pts.length) return [];
+  const out = [];
+  let c = null;
+  for (const p of pts) {
+    if (!c) { c = { x0: p.x, x1: p.x, y0: p.y, y1: p.y, t: p.t }; continue; }
+    const w = Math.max(c.x1, p.x) - Math.min(c.x0, p.x);
+    const h = Math.max(c.y1, p.y) - Math.min(c.y0, p.y);
+    if (w <= maxW && h <= maxH) {
+      c.x0 = Math.min(c.x0, p.x); c.x1 = Math.max(c.x1, p.x);
+      c.y0 = Math.min(c.y0, p.y); c.y1 = Math.max(c.y1, p.y);
+    } else { out.push(c); c = { x0: p.x, x1: p.x, y0: p.y, y1: p.y, t: p.t }; }
+  }
+  if (c) out.push(c);
+  return out.map((k) => ({ x: (k.x0 + k.x1) / 2, y: (k.y0 + k.y1) / 2, t: k.t }));
+}
+
+function capZoom(man, o) {
+  const events = man.events || [];
+  const path = (man.pointer && man.pointer.length) ? man.pointer : (man.path || []);
+  const durationMs = man.endMs || (man.frames.at(-1)?.ms ?? 0);
+  const Z = Number(o.capAmount ?? CAP.AMOUNT);
+
+  const cutoff = durationMs - CAP.TRAILING_CLICK_IGNORE_MS;
+  const endLimit = durationMs - CAP.END_CLAMP_PADDING_MS;
+  if (cutoff <= 0 || endLimit <= CAP.START_MIN_MS) return [];
+
+  const clicks = events.filter((e) => e.kind === 'click')
+    .map((e) => ({ t: e.at ?? e.t, label: e.label, x: e.x, y: e.y }))
+    .sort((a, b) => a.t - b.t);
+
+  const intervals = [];
+  for (const c of clicks) {
+    if (c.t >= cutoff) continue;
+    const start = Math.max(CAP.START_MIN_MS, c.t - CAP.PRE_PADDING_MS);
+    const end = Math.min(endLimit, c.t + CAP.POST_PADDING_MS);
+    if (end > start) intervals.push({ start, end, labels: [c.label], clicks: [c] });
+  }
+  if (!intervals.length) return [];
+
+  const merged = [];
+  for (const iv of intervals) {
+    const last = merged[merged.length - 1];
+    if (last && iv.start <= last.end + CAP.MERGE_GAP_MS) {
+      last.end = Math.max(last.end, iv.end);
+      last.labels.push(...iv.labels);
+      last.clicks.push(...iv.clicks);
+      continue;
+    }
+    merged.push({ ...iv, labels: [...iv.labels], clicks: [...iv.clicks] });
+  }
+
+  // The cluster box is a fraction of the VISIBLE viewport, so it shrinks as the
+  // zoom deepens - the deeper the push, the less the cursor may wander before
+  // the camera re-aims.
+  const boxW = (CAP.CLUSTER_W_RATIO / Z) * man.width;
+  const boxH = (CAP.CLUSTER_H_RATIO / Z) * man.height;
+  const halfW = Math.round(man.width / (2 * Z));
+  const halfH = Math.round(man.height / (2 * Z));
+
+  return merged.map((m) => {
+    const pts = path.filter((p) => p.t >= m.start && p.t <= m.end);
+    let cl = buildClusters(pts, boxW, boxH);
+    if (!cl.length) {
+      // Cap falls back to the nearest cursor sample outside the segment; with
+      // none at all, the click itself is a better answer than the frame centre.
+      const near = path.filter((p) => p.t <= m.start).at(-1) || path[0];
+      cl = [near ? { x: near.x, y: near.y, t: m.start }
+                 : { x: m.clicks[0].x, y: m.clicks[0].y, t: m.start }];
+    }
+    const reason = [...new Set(m.labels)].join(' + ');
+    return {
+      startMs: Math.round(m.start),
+      endMs: Math.round(m.end),
+      reason: `cap: ${reason}`,
+      targets: cl.map((c, i) => ({
+        tMs: Math.round(Math.max(m.start, Math.min(m.end, i === 0 ? m.start : c.t))),
+        rect: [Math.round(c.x) - halfW, Math.round(c.y) - halfH, halfW * 2, halfH * 2],
+        z: Z,
+        reason: `cap: ${reason}`,
+        kind: 'cap',
+      })),
+    };
+  });
+}
+
 function directClicks(man, o) {
   const events = man.events || [];
   // `pointer` is the container path's real cursor track; `path` is the drawn
@@ -220,8 +347,41 @@ export async function direct(shotDir, opts = {}) {
   const path = man.path || [];
   const endMs = man.endMs || (man.frames.at(-1)?.ms ?? 0);
 
-  // Simple mode is the default. The full director still exists behind --smart;
-  // the machinery is sound, it just is not what a demo needs.
+  // A still camera is the default.
+  //
+  // Three cameras have been built here and all three were rejected: the full
+  // director (defensible zooms that read as arbitrary), one push per click at a
+  // computed depth, and the same anchored precisely on the pointer. The last one
+  // is accurate - the push lands on the cursor and starts on the click, both
+  // measured - and it was still not wanted. A demo does not need the camera to
+  // move; it needs the product to do something worth watching, and the pacing
+  // pass is what makes that read. Bring it back with --zoom-clicks.
+  if ((o.mode || 'cap') === 'cap') {
+    const chains = capZoom(man, o);
+    const edl = {
+      source: shotDir, durationMs: endMs, mode: 'cap',
+      frame: { w: man.width, h: man.height },
+      warnings: chains.length ? [] : ['no usable clicks - the camera will not move'],
+      chains, shallow: 0,
+      zooms: chains.flatMap((c) => c.targets),
+      rejected: events.filter((e) => e.kind !== 'click')
+        .map((e) => ({ tMs: e.t, kind: e.kind, label: e.label })).slice(0, 40),
+    };
+    writeFileSync(join(shotDir, 'edit.json'), JSON.stringify(edl, null, 1));
+    return edl;
+  }
+
+  if (o.mode === 'still') {
+    const edl = {
+      source: shotDir, durationMs: endMs, mode: 'still',
+      frame: { w: man.width, h: man.height },
+      warnings: [], chains: [], shallow: 0, zooms: [],
+      rejected: events.map((e) => ({ tMs: e.t, kind: e.kind, label: e.label })).slice(0, 40),
+    };
+    writeFileSync(join(shotDir, 'edit.json'), JSON.stringify(edl, null, 1));
+    return edl;
+  }
+
   if ((o.mode || 'clicks') === 'clicks') {
     const chains = directClicks(man, o);
     const edl = {
@@ -483,7 +643,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       minGapMs: arg('gap', DEFAULTS.minGapMs),
       padFrac: arg('pad', DEFAULTS.padFrac),
       clickZoom: arg('zoom', DEFAULTS.clickZoom),
-      mode: rest.includes('--smart') ? 'smart' : 'clicks',
+      mode: rest.includes('--smart') ? 'smart'
+        : rest.includes('--still') ? 'still'
+        : rest.includes('--zoom-clicks') ? 'clicks' : 'cap',
     }));
   }
 }

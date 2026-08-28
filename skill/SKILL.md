@@ -415,7 +415,52 @@ Preflight has three causes and three different fixes:
 | row/list selectors missing, `looksEmpty` | S0 does not exist | seed it (§4–5) |
 | only later-step selectors missing | that state is not rendered yet | `"later": true` on those steps |
 
-## 8a. The camera
+## 8a. The camera — Cap's auto-zoom, ported
+
+Three cameras were written here before this one and all three were rejected: the
+full director (defensible zooms that read as arbitrary), one push per click at a
+computed depth, and the same anchored precisely on the pointer. The last was
+accurate — push on the cursor, starting on the click, both measured — and still
+not wanted. So the camera is now a port of the one that ships in a product
+people use: `generate_zoom_segments_from_clicks_impl` in Cap's
+`apps/desktop/src-tauri/src/recording.rs`, with the focus logic from
+`crates/rendering/src/zoom_spring.rs`.
+
+| constant | value | what it buys |
+|---|---|---|
+| `CLICK_PRE_PADDING_MS` | 300 | the push starts just before the click |
+| `CLICK_POST_PADDING_MS` | 2500 | and holds 2.5s after it |
+| `MERGE_GAP_MS` | 2500 | **clicks within 2.5s become ONE segment** |
+| `TRAILING_CLICK_IGNORE_MS` | 1000 | a take never ends mid-push |
+| `CLICK_END_CLAMP_PADDING_MS` | 800 | segments stop before the video does |
+| `DEFAULT_AUTO_ZOOM_AMOUNT` | 2.0 | one depth, always |
+
+**Merging is the part that matters most.** A burst of clicks is one sustained
+push, not the camera pumping in and out on each. That is most of why Cap's zooms
+read as calm.
+
+Inside a segment the focus **follows the cursor**: pointer samples are grouped
+into greedy bounding boxes limited to 50% x 70% of the *visible* viewport
+(`CLUSTER_WIDTH_RATIO / amount`), and the active cluster's centre is the aim. So
+the deeper the push, the less the cursor may wander before the camera re-aims.
+
+**On `edge_snap_ratio`.** Cap maps the focus through travel space rather than
+clamping, and this was rejected here once with a measurement showing it
+decentred a click by 279px. That measurement was real and the conclusion was
+wrong: `edge_snap_ratio = 1/(2 x amount)` makes travel space **exactly the
+identity** — focus dead-centre in the interior, pinned at the edges. Cap ships
+0.25 against amount 2.0, which is precisely that. It was tested here at 0.25
+against amount 1.85 *and* a window inset, which decalibrates it, and the formula
+took the blame. Clamping to the window is the same function, calibrated.
+
+**Not ported:** the spring (stiffness 200, damping 40, mass 2.25, stepped at
+125Hz). Reproducing it means baking a per-frame table into an ffmpeg expression.
+The smoothstep envelope stands in — an approximation, not a port.
+
+`--still` for a camera that never moves; `--zoom-clicks` for the older one-push-
+per-click; `--smart` for the full director.
+
+## 8a0. The camera (superseded)
 
 **One push per click, centred on the cursor, then out. That is the whole rule.**
 

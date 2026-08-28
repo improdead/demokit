@@ -23,6 +23,8 @@ if (!shotArg || !outArg) {
   console.error('           | dusk ember tide slate noir linen | #rrggbb | <wallpaper.jpg> | blur');
   console.error('  --bgblur 0.004 --bgsat 0.82 --bgdim 0.92   how far a photo backdrop recedes');
   console.error('  --edit   auto (write edit.json) | off      --redirect  regenerate it');
+  console.error('  --still  camera never moves   --zoom-clicks  one push per click');
+  console.error('           (default: Cap auto-zoom - merged click segments that follow the cursor)');
   console.error('  --pad    0.55  room around a zoom target, as a share of the target');
   console.error('  --deep   1.7   deepest zoom; small targets approach it, big ones stay shallow');
   console.error('  --chrome <url> draw macOS + browser chrome around the page  [--tabs a|b|c]');
@@ -73,9 +75,14 @@ if (arg('edit', 'auto') !== 'off') {
       maxZooms: Number(arg('maxbeats', '6')),
       minGapMs: Number(arg('gap', '1800')),
       padFrac: Number(arg('pad', '0.55')),
+      mode: rest.includes('--smart') ? 'smart'
+        : rest.includes('--still') ? 'still'
+        : rest.includes('--zoom-clicks') ? 'clicks' : 'cap',
     });
     for (const w of edl.warnings || []) console.log(`edit: ! ${w}`);
-    console.log(`edit: ${edl.zooms.length} zoom(s), each with a reason:`);
+    if (edl.mode === 'still') console.log('edit: still camera - it does not move');
+    else if (edl.mode === 'cap') console.log(`edit: Cap auto-zoom - ${edl.chains.length} segment(s), ${edl.zooms.length} focus point(s)`);
+    else console.log(`edit: ${edl.zooms.length} zoom(s), each with a reason:`);
     for (const z of edl.zooms) {
       console.log(`  ${(z.tMs / 1000).toFixed(1).padStart(6)}s  ${z.rect[2]}x${z.rect[3]}  ${z.reason}`
         + (z.warn ? `  [!] ${z.warn}` : ''));
