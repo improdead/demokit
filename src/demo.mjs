@@ -221,7 +221,7 @@ if (!process.argv.includes('--no-verify')) {
         console.log('  A step that changes nothing is a beat the demo should not have. '
           + 'Fix the flow, not the framing.');
       }
-    } else if (v.why) {
+    } else if (v.why && !['term', 'screen'].includes(man0.source)) {
       console.log(`\nfeature check: ${v.outcome} - ${v.why}`);
     }
   } catch (e) {
