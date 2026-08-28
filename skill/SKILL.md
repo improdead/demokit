@@ -524,10 +524,15 @@ almost right:
 | `--inset` | **0.72** | at 0.86 the window fills the frame edge to edge and the backdrop stops existing; below ~0.6 the UI is too small to read |
 | `--bg` | `auto` | see below |
 
-**Pick the ground by contrast, not by taste.** `auto` measures how bright the
-recording is and picks the opposite: a dark app gets the bright Sonoma
-wallpaper, a light one gets the dark radial fan, and the generated gradients
-(`dusk`, `linen`, `tide`) are the fallback when no wallpaper is on disk.
+**`auto` uses the macOS Sonoma wallpaper, under light and dark apps alike.** The
+generated gradients (`dusk`, `linen`, `tide`) are the fallback when no wallpaper
+is on disk.
+
+The usual advice — a light app needs a dark ground — was tried and produced the
+worse picture: the dark radial fan behind a white UI blurs to a flat navy smear,
+while Sonoma behind the same UI is vivid and still leaves the window as the
+subject. Separation comes from the shadow and the blur, not from darkening the
+ground.
 
 **Blur hard, and never desaturate.** The ground is a surface, not a picture. An
 earlier version of this rejected the macOS wallpapers as muddy — which was true

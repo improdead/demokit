@@ -148,12 +148,19 @@ print(sum(px) / len(px))`;
     const p = join(dir0, '.cache', 'wallpapers', n);
     return existsSync(p) ? p : null;
   };
-  // Sonoma is bright, so it sits under a dark app; the radial fan is dark and
-  // sits under a light one.
-  const pick = lum < 90 ? wall('mac-sonoma.png')
-    : lum > 150 ? (wall('mac-radial-sky-blue.png') || wall('mac-sonoma.png'))
-    : wall('mac-sonoma.png');
-  if (pick) return pick;
+  // Sonoma under everything, and the luminance is not consulted for it.
+  //
+  // The rule that a light app needs a DARK ground is the usual advice and it
+  // produced the worse picture here: the dark radial fan behind a white UI
+  // blurs to a flat navy smear, while Sonoma behind the same UI is vivid and
+  // still leaves the window as the subject. Separation is coming from the
+  // shadow and the blur, not from making the ground dark.
+  //
+  // Which also means the code this replaced was right to prefer a wallpaper and
+  // wrong only in how it treated one - and the version in between blamed the
+  // wallpaper for what the treatment was doing.
+  const sonoma = wall('mac-sonoma.png');
+  if (sonoma) return sonoma;
   return lum > 150 ? 'dusk' : lum < 70 ? 'linen' : 'tide';
 }
 
