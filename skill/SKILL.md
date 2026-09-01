@@ -966,20 +966,21 @@ different one with `--cap-config`. What *is* tunable is time:
 
 | knob | default | it controls |
 | --- | --- | --- |
-| `--still` | 3 s | how long the screen must be frozen before it counts as dead air |
-| `--deadspeed` | 9 | the ceiling on how fast dead air runs (short gaps ramp up from 2.5x) |
-| `--read` | 2.5 s | time kept at 1x after every click so the viewer can read what appeared |
-| `--headhold` / `--tailhold` | 1.4 s / 2.6 s | untouched footage at the open and on the payoff |
+| `--still` | 1.2 s | how long the screen must be frozen before it counts as dead air |
+| `--deadspeed` | 9 | the ceiling on how fast dead air runs — a 1.2s gap runs 2.5x, longer gaps ramp up |
+| `--read` | 1.6 s | time kept at 1x after every click so the viewer can read what appeared |
+| `--headhold` / `--tailhold` | 0.9 s / 2.6 s | untouched footage at the open and on the payoff |
 | `--speed` | 4 | rate for idle that is *inferred* (no pointer motion, no typing) rather than measured |
-| `--keep` | 0.55 s | padding kept at 1x around every protected span |
+| `--keep` | 0.35 s | padding kept at 1x around every protected span |
 
 **Dead air is measured from the frames** (§10), and it may never touch a camera move, a typing
-run, a pointer glide, or the read window after a click. The defaults are conservative: on a 14s
-take with two clicks they compress almost nothing, because every idle gap is under `--still` and
-the camera segment shields its whole span. For a brisker cut lower `--still` toward 1.2, `--read`
-toward 1.6, and narrow camera protection to the moments it actually moves — the spring-in, the
-spring-out and each re-aim — rather than the whole segment. Judge the result by whether a cut ever
-lands inside a camera move (print `pace.json` against `edit.json`), not by the duration alone.
+run, a pointer glide, or the read window after a click. **A camera move is the moment the camera
+moves** — the spring-in at a segment's start, the spring-out at its end, each re-aim inside it —
+not the whole segment: with Cap's spring the motion has settled ~0.8s after the target changes and
+the camera then holds perfectly still, and holding still is not a reason to keep idle footage at
+1x. Protecting a whole 7s segment is why a 14s take once came back 13.7s long; with these
+defaults the same take is 11.3s and no cut lands inside a move. Judge a cut by exactly that —
+print `pace.json` against the motion windows from `edit.json` — not by the duration alone.
 
 **Backdrop.** The Cap engine uses the wallpaper from the Cap config unblurred, and does not zoom
 it — the display scales over a fixed ground, exactly as Cap does. With `--engine ffmpeg`, `--bg`
