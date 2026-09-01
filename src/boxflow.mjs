@@ -297,7 +297,7 @@ async function glide(x, y) {
   // mis-anchor on.
   const elapsed = Math.max(1, now() - t0);
   pts.forEach(([px, py], i) => {
-    path.push({ x: px - winX, y: py - winY, t: Math.round(t0 + (elapsed * (i + 1)) / pts.length) });
+    path.push({ x: px - winX, y: py - winY, t: Math.round(t0 + (elapsed * (i + 1)) / pts.length), cursor_id: '0' });
   });
   curX = x; curY = y;
 }
@@ -329,6 +329,24 @@ for (const s of flow.steps) {
     // because the row above it had grown, and the whole take then filmed a
     // feature that never ran. The pointer is already close, so the correction
     // is a short hop rather than a second approach.
+    // Which cursor is showing here? Cap records the real cursor shape with every
+    // sample and draws THAT - the pointing hand over a link is most of why its
+    // cursor reads as real. We cannot read the X11 cursor image, but the page
+    // knows what it asked for: the computed `cursor` style under the pointer.
+    const shape = await page.evaluate(([px, py]) => {
+      const el = document.elementFromPoint(px, py);
+      let n = el;
+      while (n) {
+        const c = getComputedStyle(n).cursor;
+        if (c && c !== 'auto' && c !== 'default') {
+          return c.startsWith('pointer') ? '1' : c === 'text' ? '2' : c === 'not-allowed' ? '3' : '0';
+        }
+        n = n.parentElement;
+      }
+      // `auto` over an input or a text run is an I-beam; anywhere else, the arrow.
+      return el && (/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable) ? '2' : '0';
+    }, [b.x + b.width / 2, b.y + b.height / 2]).catch(() => '0');
+    if (path.length) path[path.length - 1].cursor_id = shape;
     const b2 = await loc.boundingBox({ timeout: 1200 }).catch(() => null);
     if (b2) {
       const [nx, ny] = toScreen(b2.x + b2.width / 2, b2.y + b2.height / 2);
@@ -363,17 +381,23 @@ for (const s of flow.steps) {
     }
     if (s.beat !== false && !s.beatAfter) events.push(ev);
     const tAct = now();
-    // WHEN the camera moves and WHERE it aims are different questions with
-    // different answers. `t` is the beat - after the change has rendered, so the
-    // push does not arrive early. `at` is the click itself, which is the only
-    // moment the pointer is guaranteed to be on the target.
-    ev.at = tAct;
     actions.push({ type: 'click', x: ev.x, y: ev.y, t: tAct, label });
     // The real pointer is already there, so let xdotool deliver the click too -
     // one event, visible and effective, instead of a drawn one and a dispatched
     // one that have to be trusted to agree.
-    await xdo(['click', '1']);
+    //
+    // Press and release are separate events with a human-length press between
+    // them. Cap's auto-zoom anchors a segment's END to the release (+2500ms),
+    // so a recording that only knows the press comes out ~140ms short on every
+    // segment - measured against the segments Cap wrote into a real recording,
+    // the median human press was 141ms, range 103-174.
+    await xdo(['mousedown', '1']);
+    ev.at = now();
+    await page.waitForTimeout(118 + Math.round(Math.random() * 44));
+    await xdo(['mouseup', '1']);
+    ev.up = now();
     if (s.do === 'type') {
+      if (path.length) path[path.length - 1].cursor_id = '2';
       await page.waitForTimeout(200);
       await xdo(['type', '--delay', String(s.delay ?? 135), s.text]);
       await page.waitForTimeout(s.settleAfterMs ?? 900);

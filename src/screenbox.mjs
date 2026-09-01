@@ -333,7 +333,7 @@ while True:
     }
     writeFileSync(join(shotDir, 'manifest.json'), JSON.stringify({
       width: geom.w, height: geom.h, layout: [geom.w, geom.h], zoom: 1, dsf: 1,
-      source: 'screenbox', deco,
+      source: 'screenbox', deco, screenW: W, screenH: H,
       endMs: frames.length ? frames.at(-1).ms : 0,
       // path stays empty on purpose: the cursor is REAL in these frames, so
       // cursor.py must not draw a second one over it.

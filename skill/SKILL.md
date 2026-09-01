@@ -415,6 +415,47 @@ Preflight has three causes and three different fixes:
 | row/list selectors missing, `looksEmpty` | S0 does not exist | seed it (§4–5) |
 | only later-step selectors missing | that state is not rendered yet | `"later": true` on those steps |
 
+## 8. The render engine — a port of Cap's, checked against a Cap recording
+
+The user recorded the reference (`~/Downloads/cloud.mp4`) with Cap, and Cap
+keeps every recording's bundle in `~/Library/Application Support/so.cap.desktop/
+recordings/*.cap`: `project-config.json` (the exact background, padding,
+rounding, shadow, cursor and spring settings), `recording-meta.json` (cursor
+shapes with hotspots), `content/segments/*/cursor.json` (every move and click),
+and `assets/current-desktop-background.jpg` (the wallpaper at record time).
+That bundle, not the pixels, is what "the same as Cap" means. Read it first;
+the measurements only confirmed it.
+
+`src/caprender.py` renders a take the way `crates/rendering` does, in one
+Python pass that streams frames to ffmpeg. `--engine ffmpeg` is the old
+zoompan graph.
+
+| what | Cap's rule | where |
+|---|---|---|
+| zoom segments | press-300ms to **release**+2500ms, merge within 2500ms, ignore the last 1s, end 800ms early, amount 2.0 | `recording.rs` |
+| zoom motion | two spring-mass-dampers (centre; amount+activity), 8ms steps, stiffness 200 / damping 40 / mass 2.25; centre tracks its target for free while amount ≤ 1.0005; amount clamped ≥ 1 | `zoom_spring.rs` |
+| focus | greedy cursor clusters boxed at 50%×70% of the *visible* viewport; `calculate_follow_center` with edge snap 0.25 | `zoom_spring.rs` |
+| what scales | the **display** scales over a **fixed** wallpaper — Cap never zooms the background | `display_bounds` in `lib.rs` |
+| padding | `10/100 × 0.4` of the long axis, each side | `SCREEN_MAX_PADDING` |
+| corners | superellipse power 4, radius `7.5/100 × 0.5 × min(display axis)` | `composite-video-frame.wgsl` |
+| shadow | size `14.4%` and blur `3.8%` of the card's half short axis, × strength `0.736`; opacity `0.736 × 0.681`; `smoothstep(size+blur, -blur, |sdf|)`; no offset | same shader |
+| cursor | the **recorded shape** per sample (arrow / pointing hand / I-beam), hotspot from meta; `cursor_height_px = 60 × screen_h/1080 × display_h/crop_h × size/100`; shrinks to 0.8 over 130ms around a click; leans `0.03°/px × 0.15` of its 0.4s x-travel, ±20° | `layers/cursor.rs` |
+| cursor motion | shake filter, 60fps decimation, 60Hz spring (mellow 470/3/70) fed its own lag ahead, target snaps to a click 500ms out, stiffer spring (530/1/40) 175ms before it, **hold** across gaps > 66ms | `cursor_interpolation.rs` |
+
+**Verified, not assumed.** Fed that recording's own `cursor.json`, the ported
+segment generator reproduces all five of Cap's segments to the millisecond —
+*once both press and release events go in.* Press-only came out ~140ms short
+on every segment, which is how the recorder came to log `at` and `up`
+separately with a 118–162ms human press between them.
+
+**Not ported, and not claimed:** motion blur (screen and cursor). If the motion
+still feels off, that is the gap.
+
+Two recorder consequences: every pointer sample carries a `cursor_id` (the
+page's computed `cursor` style under the pointer — `pointer` → hand, an input →
+I-beam), and `screenH` is in the manifest because the cursor is sized from the
+*display's* height, not the window's.
+
 ## 8a. The camera — Cap's auto-zoom, ported
 
 Three cameras were written here before this one and all three were rejected: the

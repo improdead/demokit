@@ -46,7 +46,8 @@ for (const k of RECIPE_KEYS) { const v = arg0(k, null); if (v !== null) recipe[k
 // Loud about typos: a misspelled key means the change did NOT happen, and
 // reporting that as success is how a "fixed" render ships unchanged.
 for (const k of rest.filter((a) => a.startsWith('--')).map((a) => a.slice(2))) {
-  if (!RECIPE_KEYS.includes(k) && !['edit', 'redirect', 'beats', 'maxbeats', 'fill'].includes(k)) {
+  if (!RECIPE_KEYS.includes(k) && !['edit', 'redirect', 'beats', 'maxbeats', 'fill', 'no-verify', 'engine',
+      'cap-config', 'cap-assets', 'no-maclights', 'no-trim', 'still', 'cap', 'zoom-clicks', 'smart', 'fps'].includes(k)) {
     console.warn(`demo: ignoring unknown option --${k}`);
   }
 }
@@ -96,10 +97,15 @@ if (arg('edit', 'auto') !== 'off') {
 // pointer path. Must happen before compositing so they scale with the window.
 // A screen recording already has the real cursor in the pixels - drawing a
 // second one there is the exact bug this tool exists to avoid.
-if ((man0.path || []).length) {
+// Engine. `cap` renders the way Cap does - springs, squircle, shadow, cursor
+// shapes, the display scaling over a fixed wallpaper - in one Python pass that
+// streams frames to ffmpeg. `ffmpeg` is the older zoompan graph. Cap is the
+// default because a Cap recording is what the user pointed at and said "this".
+const ENGINE = arg0('engine', 'cap');
+if (ENGINE !== 'cap' && (man0.path || []).length) {
   const cur = await runp('python3', [join(HERE, 'cursor.py'), shotDir], { maxBuffer: 1 << 26 });
   process.stdout.write(cur.stdout);
-} else {
+} else if (ENGINE !== 'cap') {
   console.log('cursor pass: skipped (no pointer path - real cursor is in the frames)');
 }
 
@@ -114,7 +120,20 @@ if (arg('chrome', null) !== null) {
   process.stdout.write(c.stdout);
 }
 
-const r = await render({
+let r;
+if (ENGINE === 'cap') {
+  const outW = Number(arg('w', '3840')), outH = Number(arg('h', '2160'));
+  const args = [join(HERE, 'caprender.py'), shotDir, stage, '--w', String(outW), '--h', String(outH),
+    '--fps', String(arg('fps', '30'))];
+  if (arg0('cap-config', null)) args.push('--config', arg0('cap-config', null));
+  if (arg0('cap-assets', null)) args.push('--assets', arg0('cap-assets', null));
+  const cr = await runp('python3', args, { maxBuffer: 1 << 26 });
+  process.stdout.write(cr.stdout);
+  if (cr.stderr) process.stderr.write(cr.stderr.split('\n').filter((l) => !l.startsWith('caprender:')).join('\n'));
+  const edlCap = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : { chains: [], zooms: [] };
+  r = { frames: man0.frames.length, srcW: man0.width, srcH: man0.height, outW, outH,
+        zooms: edlCap.chains.length, backdrop: 'cap: desktop wallpaper' };
+} else r = await render({
   shotDir, output: stage, assetDir: ASSETS,
   // capture is 2x device pixels; downscale to 1080p so the picture is sharp
   // 4K by default. 1080p was the default and every 4K take needed two flags
