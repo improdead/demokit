@@ -180,9 +180,25 @@ const protectOpen = Number(arg('pull', '1.28')) > 1.001 && openPullMs > 0
 // and then the pace map put it back.
 //
 // Idle means idle: nothing moving, nothing being typed, camera at rest.
+// The moments a camera segment actually MOVES: the spring-in at its start, the
+// spring-out at its end, and each re-aim inside it. With Cap's spring the
+// motion has settled ~0.8s after the target changes; between those moments the
+// camera holds perfectly still, and holding still is not a reason to keep
+// idle footage at 1x. Protecting a whole 7s segment is why a 14s take came
+// back 13.7s long.
+function cameraMotion(edl) {
+  const out = [];
+  for (const c of (edl?.chains) || []) {
+    out.push([c.startMs - 100, c.startMs + 900]);
+    out.push([c.endMs - 100, c.endMs + 900]);
+    for (const t of c.targets || []) if (t.tMs > c.startMs + 200) out.push([t.tMs - 100, t.tMs + 700]);
+  }
+  return out;
+}
+
 function protectedSpans(man, edl) {
   const out = [];
-  for (const c of (edl?.chains) || []) out.push({ fromMs: c.startMs, toMs: c.endMs });
+  for (const [a, b] of cameraMotion(edl)) out.push({ fromMs: Math.max(0, a), toMs: b });
 
   // Typing runs: from the keystroke beat back over the run and past its settle.
   for (const e of man.events || []) {
@@ -199,7 +215,7 @@ function protectedSpans(man, edl) {
   //
   // 2.5s, which is the same number Cap holds a zoom for after a click, for the
   // same reason.
-  const readMs = Number(arg('read', '2500'));
+  const readMs = Number(arg('read', '1600'));
   for (const e of man.events || []) {
     if (e.kind === 'click' || e.kind === 'type') {
       out.push({ fromMs: e.t, toMs: e.t + readMs });
@@ -233,12 +249,12 @@ const spans = protectedSpans(manNow, edlNow);
 // all. On the take this was written for, 20.1 of 23.8 seconds were frozen and
 // the event log had found 3 of them.
 const { stillness } = await import('./still.mjs');
-const stillSec = Number(arg('still', '3'));
+const stillSec = Number(arg('still', '1.2'));
 let dead = [];
 try {
   const st = await stillness(shotDir, { minSec: stillSec });
   const tailKeep = Number(arg('tailhold', '2.6')) * 1000;
-  const headKeep = Number(arg('headhold', '1.4')) * 1000;
+  const headKeep = Number(arg('headhold', '0.9')) * 1000;
   const endMs = manNow.frames?.length ? manNow.frames.at(-1).ms : 0;
 
   // Stretches dead air may never touch: a camera move, and the seconds after a
@@ -248,10 +264,10 @@ try {
   // nothing happening. 2.5s, the same number Cap holds a zoom for after a click,
   // for the same reason.
   const keepOut = [
-    ...((edlNow?.chains) || []).map((c) => [c.startMs, c.endMs]),
+    ...cameraMotion(edlNow),
     ...(manNow.events || [])
       .filter((e) => e.kind === 'click' || e.kind === 'type')
-      .map((e) => [e.t, e.t + Number(arg('read', '2500'))]),
+      .map((e) => [e.t, e.t + Number(arg('read', '1600'))]),
   ].sort((a, b) => a[0] - b[0]);
 
   for (const sp of st.spans) {
@@ -284,7 +300,7 @@ console.log(`pace: protecting ${spans.length} span(s) - camera moves, typing run
   + `and every stretch where the pointer is moving`);
 const p = await pace({
   input: stage, output: outPath, clicks, workDir: ASSETS,
-  keep: Number(arg('keep', '0.55')), speed: Number(arg('speed', '4')),
+  keep: Number(arg('keep', '0.35')), speed: Number(arg('speed', '4')),
   dead, deadSpeed: Number(arg('deadspeed', '9')),
 });
 if (p.skipped) copyFileSync(stage, outPath);

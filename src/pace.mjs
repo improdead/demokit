@@ -86,7 +86,10 @@ export function planSegments({ clicks, duration, keep = 1.35, speed = 4, minIdle
       const gap = a - cursor;
       const isDead = dead.some((d) => d.from <= cursor + 0.05 && d.to >= a - 0.05);
       const rate = gap < minIdle ? 1
-        : isDead ? Math.min(24, Math.max(deadSpeed, gap / 1.2))
+        // A short idle gets a brisk 2.5x; the rate climbs with the gap so a
+        // long freeze still collapses, and deadSpeed caps it. Jumping straight to
+        // 9x on a 1.2s gap read as a cut, not as speed.
+        : isDead ? Math.min(deadSpeed, Math.max(2.5, gap / 0.9))
         : Math.min(24, speed * Math.max(1, gap / 8));
       segs.push({ start: cursor, end: a, speed: rate });
     }

@@ -1,6 +1,6 @@
 ---
 name: demo-video
-description: Plan and produce a polished demo video of a web app, a CLI, or a native app — probe the target, decide what to prove, seed realistic data when the environment is empty, then record and edit it into an MP4 with a cursor, change-aware zoom, a real backdrop and dead air compressed, and measure the result against objective checks. Use when the user asks for a demo video, a product walkthrough, a screen or terminal recording, a clip to send customers or investors, or wants to show a feature or a command working. Runs on demokit (capture + ffmpeg); browser capture goes through playwriter, terminals are rendered offscreen.
+description: Plan and produce a polished demo video of a web app, a CLI, or a native app the way a forward-deployed engineer would — read the codebase first to map the routes, states and selectors, write a roadmap and a one-sentence claim, confirm it against the live UI, seed realistic data when the environment is empty, then record a deterministic flow and render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the FEATURE worked before judging the film. Use when the user asks for a demo video, a product walkthrough, a screen or terminal recording, a clip to send customers or investors, or wants to show a feature or a command working. Runs on demokit (capture + ffmpeg); browser capture goes through playwriter, terminals are rendered offscreen.
 ---
 
 # Making a demo video
@@ -37,8 +37,9 @@ A demo is an argument, not a recording. It proves **one claim** by walking a pat
 application states. You cannot argue about a product you have not looked at, and you cannot look at
 it with your imagination.
 
-**Probe → claim → ledger → seed → film → verify.** Do not skip to the flow file; every bad demo
-this tool has produced came from writing steps before deciding what was being proved.
+**Code → roadmap → probe → claim → ledger → seed → film → verify.** Do not skip to the flow
+file; every bad demo this tool has produced came from writing steps before deciding what was being
+proved — or from discovering the product by clicking around while the camera was rolling.
 
 Load the **playwriter** skill first — it is the browser-control layer under this one. The tool
 lives at `demokit/` and is a CLI, not an MCP server.
@@ -51,7 +52,87 @@ You write the flow. Everything after it is one command.
 
 ---
 
-## 1. Probe first. No probe, no flow file.
+## 0. Work like a forward-deployed engineer
+
+You are not screen-recording a product. You are making an argument to one specific person, using
+the product as evidence. A forward-deployed engineer walks into a customer's environment already
+knowing where the feature lives, what state it needs to be in, and which screen carries the proof —
+because they read the system before they touched it. Do the same.
+
+**Answer these before you open a browser:**
+
+1. **Who is watching, and what do they believe today?** A security engineer who triages scanner
+   noise by hand. An EM who has never had a PR reviewed for security. Name them. The demo opens on
+   *their* current reality, not on the product's home page.
+2. **The one claim.** One sentence, one buyer, one workflow (§2). If it needs an "and", it is two
+   videos.
+3. **The arc.** A state the viewer recognises → the action → the product visibly doing the thing →
+   the outcome they wanted. Four to six states (§3). Exactly one is the payoff.
+4. **The payoff frame.** Describe the single frame that proves the claim. If you cannot, stop.
+
+### Read the code before the UI
+
+When the repository is available — and in this setup it almost always is — the codebase is a map
+the live UI cannot give you: every route, every label, every selector, every feature flag, every
+seed script, every happy path someone already automated. Use it to build the roadmap, then use the
+live UI only to **confirm** it. Never learn a product by clicking around during a take: a recording
+is a performance of a plan, not an exploration, and a take that wanders is a take you throw away.
+
+| Looking for | Read | Gives you |
+| --- | --- | --- |
+| the pages and their URLs | `app/**/page.tsx`, `pages/**`, the router file | the exact `url` for the flow, and which screen is the payoff |
+| how a user gets there | the nav / sidebar component | the labels and `href`s a viewer will recognise; the clicks between states |
+| stable selectors | `data-testid`, `aria-label`, `role`, component names | selectors that survive a redesign; text selectors are last resort |
+| what the feature actually does | the handler / API route / server action behind the button | what state changes, what to `prove`, how long it takes, whether it mutates production |
+| whether it is even on | feature flags, plan gates, permissions checks | why a button is missing for this account, before you blame the selector |
+| data to open on | `prisma/seed*`, `fixtures/`, factories, e2e setup | realistic S0 in one command instead of hand-made mocks (§5) |
+| a path someone already proved | Playwright / Cypress e2e tests | selectors *and* the happy path, already debugged — the best source there is |
+| a slow, visible operation | job runners, polling hooks, streaming endpoints | the "working state then result" beat that convinces more than any cut |
+
+Twenty minutes in the code saves every wasted take. If the repo is not available, the probe (§1)
+is your only map — say so in the roadmap, and expect a second probe round.
+
+### Write the roadmap, then confirm it
+
+A short document, in the flow file's `_roadmap` or beside it, before any step is written:
+
+```
+AUDIENCE   security engineer, pentests quarterly, triages scanner output by hand
+CLAIM      ...one sentence (§2)...
+ARC        S0 backlog they recognise -> S1 filtered -> S2 one finding open -> S3 fix in hand
+PAYOFF     S2: CVSS, evidence and the patch on one screen
+
+SCREENS    #  url                                  must be visible          action -> selector                 proves
+           0  /project/<id>/surface/findings       13k findings, 633 crit   -                                  -
+           1  same                                 list narrows to 3        type "corvel" -> [aria-label*=Search]  rowsDrop
+           2  /findings/<id>                       Technical Analysis       click row -> text=Anonymous Azure...  textAppears
+
+PRECONDITIONS  signed-in cookies exported; the corvel finding still open; review turned ON for the repo
+RISKS          list order changes daily (pick by text, not index); the Critical chip is a facet, not a filter
+UNKNOWNS       does opening a finding navigate or open a drawer? -> probe before writing step 2
+```
+
+Then **one probe pass** (§1) to confirm every selector and every "must be visible" at the geometry
+you will record at. Anything that fails confirmation goes back to the roadmap, not into the flow as
+a guess.
+
+### Rules that keep a demo professional
+
+- **Deterministic.** The same flow recorded twice shows the same data in the same order. If it does
+  not, a precondition is unseeded; fix that, do not re-roll until it looks right.
+- **Every click reveals something.** If a step changes nothing a viewer can see, it is not in the
+  demo (§11 will fail it anyway). Navigation is not change.
+- **No settings pages, no error states, no dead ends, no empty tables, no "let me just…".** Those
+  are what a demo by someone who did not plan looks like.
+- **Open on recognition, end on the outcome.** Hold the payoff. Never end mid-action.
+- **15–45 seconds per claim.** Your reference recordings are long because a human was waiting on a
+  scan; the finished demo should not be.
+- **When something is unknown, stop and go find out** — in the code, then in a probe. Never
+  `allowMissing`, never a selector you have not seen match, never a wait "to be safe".
+- **Complex state that does not exist yet** (a finished scan, a PR with findings, an agent run)
+  is produced *before* the take — seeded, triggered, or mocked (§4–5) — never improvised on camera.
+
+## 1. Confirm with a probe. No probe, no flow file.
 
 ```bash
 cd demokit && bin/demokit probe <url>     # read-only, clicks nothing, safe against production
@@ -415,7 +496,7 @@ Preflight has three causes and three different fixes:
 | row/list selectors missing, `looksEmpty` | S0 does not exist | seed it (§4–5) |
 | only later-step selectors missing | that state is not rendered yet | `"later": true` on those steps |
 
-## 8. The render engine — a port of Cap's, checked against a Cap recording
+## 9. The render engine — a port of Cap's, checked against a Cap recording
 
 The user recorded the reference (`~/Downloads/cloud.mp4`) with Cap, and Cap
 keeps every recording's bundle in `~/Library/Application Support/so.cap.desktop/
@@ -456,7 +537,7 @@ page's computed `cursor` style under the pointer — `pointer` → hand, an inpu
 I-beam), and `screenH` is in the manifest because the cursor is sized from the
 *display's* height, not the window's.
 
-## 8a. The camera — Cap's auto-zoom, ported
+## 9a. The camera — Cap's auto-zoom, ported
 
 Three cameras were written here before this one and all three were rejected: the
 full director (defensible zooms that read as arbitrary), one push per click at a
@@ -501,7 +582,7 @@ The smoothstep envelope stands in — an approximation, not a port.
 `--still` for a camera that never moves; `--zoom-clicks` for the older one-push-
 per-click; `--smart` for the full director.
 
-## 8a0. The camera (superseded)
+## 9b. The camera before the port (history — why the simpler cameras were rejected)
 
 **One push per click, centred on the cursor, then out. That is the whole rule.**
 
@@ -595,68 +676,7 @@ display is 1% of the frame height. `XCURSOR_THEME=Adwaita` and `XCURSOR_SIZE`
 at ~2.8% of display height fix that, and Chromium reads both at startup, so they
 have to be set on its launch line.
 
-## 8c1. Two terminal paths, and they are not the same thing
-
-| | `demokit term` | `demokit termreal` |
-|---|---|---|
-| the window | **drawn** by term.py with PIL | **filmed** — the real Terminal.app |
-| the output | real: a real pty, a real command | identical |
-| the chrome, font, prompt | drawn to macOS measurements | genuinely macOS pixels |
-| runs in the background | yes | **no — it takes the screen** |
-| needs | nothing | Screen Recording + Accessibility |
-
-Say which one a video is. "A real terminal" means different things across that
-line, and the difference is not visible in the result.
-
-`termreal` drives the window with System Events keystrokes at human speed, in
-**one** AppleScript for the whole session — osascript costs ~50ms of process
-setup per call, which is the same mistake that made the container's pointer take
-four seconds to cross a window.
-
-Three traps, all of which produced a broken take before they were fixed:
-
-- **Target one window by id.** A bare `activate` raises whichever Terminal window
-  is frontmost; with more than one open, the staging sizes one window while the
-  keystrokes go into another, and the take films a region larger than the window
-  with the desktop showing behind it.
-- **One `do script`.** Two of them racing on the same tty produced
-  `zsh: command not found: trclear`.
-- **Opaque background.** The stock Pro profile is semi-transparent, so whatever
-  is behind the window bleeds through the text.
-
-Those last two mean editing the user's *profile* — Terminal has no per-window
-override and no scriptable way to make a throwaway one. So every property is
-read first and put back afterwards, the same way `stage.mjs` restores window
-bounds. Recording a video is not a reason to leave someone's terminal a
-different colour.
-
-## 8c2. When the terminal window is drawn, it has to be drawn correctly
-
-A terminal capture is a REAL pty running the REAL command — every character is
-that command's actual output, nothing is simulated. What is drawn is the window
-around it: `src/term.py` paints the chrome with PIL rather than screen-recording
-Terminal.app, because a real recording brings the desktop, the notch, whatever
-tabs are open, and a font size chosen for reading rather than filming.
-
-Drawn chrome only works if the proportions are right. macOS measurements, all
-against a 28pt title bar:
-
-| part | value |
-|---|---|
-| traffic lights | 12pt across, 20pt apart, first centre 20pt from the left |
-| light colours | `#FF5F57` `#FEBC2E` `#28C840`, each with a ~18%-darker ring |
-| title | SF Pro at 13pt — never the terminal's own monospace font |
-| title bar | **lighter** than the window body in dark mode, with a top highlight and a hairline separator below |
-| body font | SF Mono, which is what Terminal.app actually renders in |
-
-That inversion — the bar being lighter than the body, not darker — is most of
-what makes a drawn window read as a Mac.
-
-One trap: SF Mono has no `❯` (U+276F), so the prompt character of most shells
-renders as *nothing at all*. Glyph coverage is checked per character with a
-fallback to Menlo rather than picking one font and losing glyphs either way.
-
-## 8c. The frame — a window floating on a ground
+## 9c. The frame — a window floating on a ground
 
 The look is a real window, centred, with room around it, sitting on a saturated
 ground. Three settings carry it, and all three have a wrong value that looks
@@ -692,7 +712,7 @@ is what stops a wallpaper doing the same. The window is the subject.
 The shadow and corner radius scale with the source width, so they hold at 4K
 without being touched.
 
-## 8a2. Two chromes sit above the page, and both must be counted
+## 9d. Two chromes sit above the page, and both must be counted
 
 In the container the pointer is moved by xdotool in SCREEN coordinates while CDP
 reports element boxes in PAGE coordinates. Converting between them means adding
@@ -721,7 +741,68 @@ whose fault that is.** Check the click landed before blaming the app: draw the
 recorded click point and the measured element box onto the frame at that
 timestamp and look at whether they agree with what is rendered.
 
-## 8b. Beats without a cursor
+## 9e. Two terminal paths, and they are not the same thing
+
+| | `demokit term` | `demokit termreal` |
+|---|---|---|
+| the window | **drawn** by term.py with PIL | **filmed** — the real Terminal.app |
+| the output | real: a real pty, a real command | identical |
+| the chrome, font, prompt | drawn to macOS measurements | genuinely macOS pixels |
+| runs in the background | yes | **no — it takes the screen** |
+| needs | nothing | Screen Recording + Accessibility |
+
+Say which one a video is. "A real terminal" means different things across that
+line, and the difference is not visible in the result.
+
+`termreal` drives the window with System Events keystrokes at human speed, in
+**one** AppleScript for the whole session — osascript costs ~50ms of process
+setup per call, which is the same mistake that made the container's pointer take
+four seconds to cross a window.
+
+Three traps, all of which produced a broken take before they were fixed:
+
+- **Target one window by id.** A bare `activate` raises whichever Terminal window
+  is frontmost; with more than one open, the staging sizes one window while the
+  keystrokes go into another, and the take films a region larger than the window
+  with the desktop showing behind it.
+- **One `do script`.** Two of them racing on the same tty produced
+  `zsh: command not found: trclear`.
+- **Opaque background.** The stock Pro profile is semi-transparent, so whatever
+  is behind the window bleeds through the text.
+
+Those last two mean editing the user's *profile* — Terminal has no per-window
+override and no scriptable way to make a throwaway one. So every property is
+read first and put back afterwards, the same way `stage.mjs` restores window
+bounds. Recording a video is not a reason to leave someone's terminal a
+different colour.
+
+## 9f. When the terminal window is drawn, it has to be drawn correctly
+
+A terminal capture is a REAL pty running the REAL command — every character is
+that command's actual output, nothing is simulated. What is drawn is the window
+around it: `src/term.py` paints the chrome with PIL rather than screen-recording
+Terminal.app, because a real recording brings the desktop, the notch, whatever
+tabs are open, and a font size chosen for reading rather than filming.
+
+Drawn chrome only works if the proportions are right. macOS measurements, all
+against a 28pt title bar:
+
+| part | value |
+|---|---|
+| traffic lights | 12pt across, 20pt apart, first centre 20pt from the left |
+| light colours | `#FF5F57` `#FEBC2E` `#28C840`, each with a ~18%-darker ring |
+| title | SF Pro at 13pt — never the terminal's own monospace font |
+| title bar | **lighter** than the window body in dark mode, with a top highlight and a hairline separator below |
+| body font | SF Mono, which is what Terminal.app actually renders in |
+
+That inversion — the bar being lighter than the body, not darker — is most of
+what makes a drawn window read as a Mac.
+
+One trap: SF Mono has no `❯` (U+276F), so the prompt character of most shells
+renders as *nothing at all*. Glyph coverage is checked per character with a
+fallback to Menlo rather than picking one font and losing glyphs either way.
+
+## 9g. Beats without a cursor
 
 A click is a good beat when there is a cursor to log. A terminal printing
 output, a chart redrawing, a build finishing — none of those have one, and the
@@ -733,7 +814,7 @@ On a browser take, add it to the click beats with `--beats augment`, or turn it
 off with `--beats off`. It deliberately finds fewer beats than clicks does on a
 browser take, because a hover changes nothing on screen — which is the point.
 
-## 8d. Look at the RAW take before you look at the edit
+## 10. Look at the RAW take before you look at the edit
 
 ```bash
 bin/demokit raw .cache/shot-<name>      # the take, with no edit applied
@@ -759,7 +840,7 @@ Any stretch over `--still` (3s) with no measured change is fast-forwarded at
 `--deadspeed`, whatever the event log thinks — except inside a camera move, and
 except the head and tail holds.
 
-## 9. Verify — first that the FEATURE worked, then that the film is good
+## 11. Verify — first that the FEATURE worked, then that the film is good
 
 Every check in this section used to be about the video. None of them can catch
 the failure that matters most: a take that is framed perfectly on a product
@@ -817,7 +898,7 @@ Collapsing it into "fine" is how a broken demo ships.
 **A failed step is a flow problem. Never fix it at the framing layer.** A beat
 that changes nothing should not be in the demo; do not zoom harder at it.
 
-## 9a. Then the film — objective checks, not "look at it"
+## 11a. Then the film — objective checks, not "look at it"
 
 Extract frame 0, 0.8s, every `clicks[].t` from `.cache/shot/manifest.json`, and the last frame:
 
@@ -868,7 +949,7 @@ still need you:
 10. **Cold eye.** Frame 0 beside the payoff frame: could someone who has never seen this product say
     what changed, and what kind of product it is, from the first three seconds alone?
 
-## 10. When a take is bad, fix it at the right layer
+## 12. When a take is bad, fix it at the right layer
 
 Tuning is the cheapest action and therefore the tempting one. Picking the wrong layer is the most
 common way this goes wrong.
@@ -879,22 +960,31 @@ common way this goes wrong.
 | Empty table, spinner at the end, logged out, occluded target, wrong element got the beat, implausible data on screen | **State** | Fix `seed` / `clearStorage` / `hide` / the flow, re-record. |
 | Too small to read, cramped, edge-clipped, zooms merging, rushed cut, long dead wait | **Framing** | `bin/demokit --render-only .cache/shot-<name> out/demo.mp4 --level 1.5 --gap 2000 --speed 4`. The frames are on disk; re-capturing is wasted work. |
 
-| knob | default | raise it when |
-| --- | --- | --- |
-| `--bg` | `auto` | the ground fights the UI — see below |
-| `--level` | 1.35 | detail is too small to read |
-| `--inset` | 0.84 | the window feels cramped in frame |
-| `--bias` | 0.4 | zooms on edge elements push the window off-screen |
-| `--gap` | 1500 | beats are merging into one long zoom |
-| `--keep` | 1.35 | the cut feels rushed around an action |
-| `--speed` | 4 | there is a long wait to compress |
+With the Cap engine (§9) the look is not tuned by knobs — it comes from a Cap project config
+(`.cache/cap/project-config.json`: wallpaper, padding, rounding, shadow, cursor, springs). Pass a
+different one with `--cap-config`. What *is* tunable is time:
 
-**Backdrop.** `auto` reads the recording's own brightness and picks a ground that separates from
-it: a dark app gets `dusk`, a light one gets `noir`, anything in between gets `slate`. Override with
-`--bg dusk|ember|tide|slate|noir|linen`, `--bg '#101014'`, `--bg path/to/wallpaper.png`, or
-`--bg blur` for the old blur-behind-itself. Pick a ground that **contrasts** with the app — a dark
-app on a dark ground has no edge and the whole frame reads as murk. Match the product's accent
-colour only if it does not also match its background.
+| knob | default | it controls |
+| --- | --- | --- |
+| `--still` | 3 s | how long the screen must be frozen before it counts as dead air |
+| `--deadspeed` | 9 | the ceiling on how fast dead air runs (short gaps ramp up from 2.5x) |
+| `--read` | 2.5 s | time kept at 1x after every click so the viewer can read what appeared |
+| `--headhold` / `--tailhold` | 1.4 s / 2.6 s | untouched footage at the open and on the payoff |
+| `--speed` | 4 | rate for idle that is *inferred* (no pointer motion, no typing) rather than measured |
+| `--keep` | 0.55 s | padding kept at 1x around every protected span |
+
+**Dead air is measured from the frames** (§10), and it may never touch a camera move, a typing
+run, a pointer glide, or the read window after a click. The defaults are conservative: on a 14s
+take with two clicks they compress almost nothing, because every idle gap is under `--still` and
+the camera segment shields its whole span. For a brisker cut lower `--still` toward 1.2, `--read`
+toward 1.6, and narrow camera protection to the moments it actually moves — the spring-in, the
+spring-out and each re-aim — rather than the whole segment. Judge the result by whether a cut ever
+lands inside a camera move (print `pace.json` against `edit.json`), not by the duration alone.
+
+**Backdrop.** The Cap engine uses the wallpaper from the Cap config unblurred, and does not zoom
+it — the display scales over a fixed ground, exactly as Cap does. With `--engine ffmpeg`, `--bg`
+takes `auto` (the Sonoma wallpaper), a generated ground (`dusk|ember|tide|slate|noir|linen`), a hex
+colour, or an image path.
 
 **If any frame ever contained a live credential, treat it as compromised.** Tell the user to rotate
 it, and delete `.cache/shot-<name>/frames` — those are full-resolution unredacted PNGs, and deleting
@@ -902,8 +992,14 @@ the MP4 is not cleanup because `--render-only` reproduces it from them.
 
 ## Known limits — state these plainly rather than letting them be discovered
 
-- **No browser chrome.** A tab screencast has no traffic lights or URL bar; it would have to be
-  drawn synthetically.
+- **Browser chrome is real only on the `box` path.** A tab screencast (`bin/demokit flows/...`)
+  has no traffic lights or URL bar. `box` films a real Chromium window; its Linux title bar is
+  cropped and a macOS bar with buttons drawn in its place (§9c) — not pixel-identical to Chrome on
+  a Mac, and said so.
+- **Motion blur is not ported** from Cap (screen and cursor). If the motion still feels off next
+  to a Cap recording, that is the gap.
+- **Recording the user's real macOS Chrome** (the way `termreal` records Terminal.app) needs an
+  Accessibility grant to move the real pointer; without it, `box` is the only real-cursor path.
 - **No audio, no captions, no text cards.** By design.
 - **Streaming responses cannot be stubbed** — `route.fulfill` buffers. Use a local server.
 - **Timezone cannot be pinned**, only the instant.
