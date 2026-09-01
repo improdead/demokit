@@ -499,9 +499,15 @@ def load_assets(assets_dir):
     if os.path.exists(meta_p):
         meta = json.load(open(meta_p))
         for cid, c in (meta.get('cursors') or {}).items():
-            p = os.path.join(assets_dir, os.path.basename(c['imagePath']))
-            if os.path.exists(p):
-                cursors[cid] = (Image.open(p).convert('RGBA'), c['hotspot']['x'], c['hotspot']['y'])
+            base = os.path.basename(c['imagePath'])
+            # The bundle keeps them under content/cursors/; the copy here keeps
+            # them under cursors/. Looking only at the top level loaded nothing,
+            # and every shape fell through to the arrow fallback - the recorder
+            # had logged a pointing hand at both clicks and the render drew arrows.
+            for cand in (os.path.join(assets_dir, 'cursors', base), os.path.join(assets_dir, base)):
+                if os.path.exists(cand):
+                    cursors[cid] = (Image.open(cand).convert('RGBA'), c['hotspot']['x'], c['hotspot']['y'])
+                    break
     if '0' not in cursors:
         p = os.path.join(ROOT, 'vendor', 'Cap', 'apps', 'cli', 'skill', 'cap-demo', 'assets', 'cursor_0.png')
         if os.path.exists(p):
@@ -610,6 +616,8 @@ def main():
     rounding_rest = rounding / 100.0 * 0.5 * min(disp_w, disp_h)
 
     cursors, wall = load_assets(assets_dir)
+    print('caprender: cursor shapes loaded: ' + ', '.join(f"{k}={SHAPES.get(k, k)}" for k in sorted(cursors))
+          + ('' if wall else '  (no wallpaper found - flat backdrop)'), file=sys.stderr)
     background = np.asarray(cover(wall, W, H), dtype=np.float32) if wall else np.full((H, W, 3), 24, np.float32)
 
     # ---- edit.json so pacing / critic / verify see the camera --------------

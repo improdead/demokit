@@ -393,7 +393,10 @@ for (const s of flow.steps) {
     // the median human press was 141ms, range 103-174.
     await xdo(['mousedown', '1']);
     ev.at = now();
-    await page.waitForTimeout(118 + Math.round(Math.random() * 44));
+    // Each xdotool call is a docker exec, ~40-50ms of its own, and the press
+    // measured 210ms with a 118-162ms wait. Aim the wait so the whole press
+    // lands in the 103-174ms a human took in the reference recording.
+    await page.waitForTimeout(60 + Math.round(Math.random() * 40));
     await xdo(['mouseup', '1']);
     ev.up = now();
     if (s.do === 'type') {
