@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npm install -g @improdead/demokit      # Node 18+; ships a static ffmpeg
+npm install -g @dekai/demokit      # Node 18+; ships a static ffmpeg
 pip3 install pillow numpy              # the renderer is Python
 ```
 

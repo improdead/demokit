@@ -1,5 +1,5 @@
 {
-  "name": "@improdead/demokit",
+  "name": "@dekai/demokit",
   "version": "0.1.0",
   "description": "Agent-native demo videos: plan from the codebase, record a deterministic flow in headless Chromium, render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the feature actually worked.",
   "bin": {

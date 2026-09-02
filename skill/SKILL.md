@@ -15,7 +15,7 @@ Works on three sources, all through the same pipeline:
 | a CLI or a script | `demokit term "<shell command>" out.mp4` (drawn window) or `demokit termreal spec.json out.mp4` (your real Terminal, filmed) |
 | a native app or the desktop | `demokit screen out.mp4 --seconds 30` |
 
-Install: `npm install -g @improdead/demokit` and `pip3 install pillow numpy`. The first recording
+Install: `npm install -g @dekai/demokit` and `pip3 install pillow numpy`. The first recording
 downloads a headless Chromium once. Everything else — a static ffmpeg included — comes with the
 package.
 
