@@ -593,25 +593,55 @@ def _outlined(w, h, draw_fn, stroke=(0, 0, 0, 255), fill=(255, 255, 255, 255), w
 
 
 def vector_arrow():
-    def f(d, S, stroke, fill, w):
-        pts = [(48, 34), (48, 232), (98, 185), (140, 270), (172, 254), (130, 170), (200, 170)]
-        pts = [(x * S / 280 * 280 / 280, y * S / 400 * 400 / 400) for x, y in pts]
-        pts = [(x * S, y * S) for x, y in [(p[0] / S, p[1] / S) for p in pts]]
-        d.polygon(pts, fill=(0, 0, 0, 255))
-        d.line(pts + [pts[0]], fill=(255, 255, 255, 255), width=w, joint='curve')
-    return _outlined(280, 400, f)
+    """macOS arrow: black body, white outline, tip at the top-left of the box."""
+    from PIL import ImageDraw
+    S = 8
+    W, H = 280, 400
+    pts = [(48, 34), (48, 232), (98, 186), (140, 270), (172, 254), (130, 170), (200, 170)]
+    im = Image.new('RGBA', (W * S, H * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    P = [(x * S, y * S) for x, y in pts]
+    d.polygon(P, fill=(0, 0, 0, 255))
+    d.line(P + [P[0]], fill=(255, 255, 255, 255), width=int(9 * S), joint='curve')
+    d.polygon(P, fill=(0, 0, 0, 255))
+    d.line(P + [P[0]], fill=(255, 255, 255, 255), width=int(4.5 * S), joint='curve')
+    return im.resize((W, H), Image.LANCZOS)
 
 
 def vector_hand():
-    def f(d, S, stroke, fill, w):
-        # palm + index finger, the macOS pointing hand read at a glance
-        d.rounded_rectangle([18 * S, 30 * S, 46 * S, 60 * S], radius=8 * S, fill=fill, outline=stroke, width=w)
-        d.rounded_rectangle([24 * S, 4 * S, 32 * S, 40 * S], radius=4 * S, fill=fill, outline=stroke, width=w)
-        d.rounded_rectangle([33 * S, 16 * S, 40 * S, 40 * S], radius=3 * S, fill=fill, outline=stroke, width=w)
-        d.rounded_rectangle([41 * S, 20 * S, 47 * S, 42 * S], radius=3 * S, fill=fill, outline=stroke, width=w)
-        d.rounded_rectangle([12 * S, 30 * S, 22 * S, 48 * S], radius=4 * S, fill=fill, outline=stroke, width=w)
-        d.rounded_rectangle([20 * S, 36 * S, 46 * S, 60 * S], radius=8 * S, fill=fill)
-    return _outlined(64, 64, f)
+    """The macOS pointing hand as ONE silhouette with a single outline.
+
+    Drawing palm and fingers as separate outlined rectangles gave every joint
+    its own border and the fingers read as bars. Here the union is drawn once
+    in black (grown by the stroke), once in white, and only the creases
+    between the fingers are drawn back on top as thin lines.
+    """
+    from PIL import ImageDraw
+    S = 8
+    W, H = 64, 64
+    im = Image.new('RGBA', (W * S, H * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    stroke = 2.2 * S
+
+    def parts(g):
+        # (x0, y0, x1, y1, radius) in the 64-box, grown by g
+        return [
+            (22 - g, 4 - g, 31 + g, 40 + g, 4.5 + g),     # index finger, extended
+            (31 - g, 14 - g, 39 + g, 40 + g, 4 + g),      # middle
+            (39 - g, 18 - g, 46 + g, 40 + g, 3.5 + g),    # ring
+            (46 - g, 23 - g, 52 + g, 41 + g, 3 + g),      # pinky
+            (12 - g, 31 - g, 24 + g, 46 + g, 5 + g),      # thumb
+            (16 - g, 34 - g, 52 + g, 60 + g, 9 + g),      # palm
+        ]
+
+    for x0, y0, x1, y1, r in parts(stroke / S):
+        d.rounded_rectangle([x0 * S, y0 * S, x1 * S, y1 * S], radius=r * S, fill=(0, 0, 0, 255))
+    for x0, y0, x1, y1, r in parts(0):
+        d.rounded_rectangle([x0 * S, y0 * S, x1 * S, y1 * S], radius=r * S, fill=(255, 255, 255, 255))
+    # creases between the fingers, from the knuckle line down to the palm
+    for x, y0 in ((31, 16), (39, 20), (46, 25)):
+        d.line([(x * S, y0 * S), (x * S, 44 * S)], fill=(0, 0, 0, 255), width=int(1.4 * S))
+    return im.resize((W, H), Image.LANCZOS)
 
 
 def vector_ibeam():

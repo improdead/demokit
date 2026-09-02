@@ -124,8 +124,10 @@ def main():
     url = opt("--url", "")
     if not url:
         url = "localhost"
-    title = opt("--title", (man.get("pageTitle") or "").strip() or url.split("/")[0])
-    tabs = (opt("--tabs") or title).split("|")
+    # A page title's " | Site" suffix names the site, not a second tab.
+    page_title = (man.get("pageTitle") or "").split("|")[0].strip()
+    title = opt("--title", page_title or url.split("/")[0])
+    tabs = opt("--tabs").split("|") if opt("--tabs") else [title]
     theme = opt("--theme", "light")
 
     strip, ch = build_chrome(w, url, title, tabs, theme)
