@@ -14,7 +14,8 @@ import { render } from './render.mjs';
 import { pace } from './pace.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ASSETS = join(HERE, '..', '.assets');
+const ASSETS = process.env.DEMOKIT_WORK ? join(process.env.DEMOKIT_WORK, '.assets') : resolve('.assets');
+mkdirSync(ASSETS, { recursive: true });   // the Cap engine writes its stage file here; nothing else creates it
 
 const [, , shotArg, outArg, ...rest] = process.argv;
 if (!shotArg || !outArg) {

@@ -1,0 +1,48 @@
+{
+  "name": "@improdead/demokit",
+  "version": "0.1.0",
+  "description": "Agent-native demo videos: plan from the codebase, record a deterministic flow in headless Chromium, render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the feature actually worked.",
+  "bin": {
+    "demokit": "bin/demokit"
+  },
+  "files": [
+    "bin/demokit",
+    "src/",
+    "skill/",
+    "flows/example.json",
+    "flows/seeded-example.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "dependencies": {
+    "playwright-core": "^1.62.1",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0"
+  },
+  "scripts": {
+    "postinstall": "node -e \"console.log('demokit: installed. First run downloads a headless Chromium (~100MB). Rendering needs python3 with Pillow and numpy: pip3 install pillow numpy')\""
+  },
+  "keywords": [
+    "demo",
+    "video",
+    "screen-recording",
+    "playwright",
+    "ffmpeg",
+    "cap",
+    "agent",
+    "claude-code",
+    "skill"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/improdead/demokit.git"
+  },
+  "license": "MIT"
+}

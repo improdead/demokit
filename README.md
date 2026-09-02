@@ -1,5 +1,44 @@
 # demokit
 
+## Install
+
+```bash
+npm install -g @improdead/demokit      # Node 18+; ships a static ffmpeg
+pip3 install pillow numpy              # the renderer is Python
+```
+
+That is the whole install. No Docker, no browser extension. The first recording
+downloads a headless Chromium (~100MB) once.
+
+```bash
+demokit local flows/example.json out/demo.mp4          # record + render + verify
+DEMOKIT_COOKIES=cookies.json demokit local flows/app.json out/demo.mp4   # behind a login
+```
+
+Work files (frames, the edit, the pace map, verification strips) land in `./.demokit/` next to
+where you ran it — add it to `.gitignore`. Set `DEMOKIT_WORK` to put them elsewhere.
+
+For anything behind a login, export cookies from a browser that is already
+signed in and point `DEMOKIT_COOKIES` at the file. They are injected before the
+first navigation; no password is ever handled.
+
+Three capture paths, one renderer:
+
+| path | what it records | needs |
+| --- | --- | --- |
+| `demokit local` | a headless Chromium demokit launches itself — the default | nothing extra |
+| `demokit box` | Chromium inside a Linux container with a real X11 pointer | Docker (2GB image) — only if you want it |
+| `demokit termreal` | your real Terminal.app, filmed | macOS, Screen Recording + Accessibility |
+
+Everything downstream of capture is the same: the Cap-style renderer (spring zoom
+on clicks, the recorded cursor shape, wallpaper, squircle, shadow), dead-air
+fast-forward, and a verification pass that checks the *feature* worked before
+anyone judges the film. The renderer ships no wallpaper and no cursor bitmaps:
+on a Mac it reads one of Apple's own wallpapers from disk at run time and draws
+the cursors as vectors; drop a Cap recording's `cursors/` and
+`desktop-background.jpg` into `.cache/cap/` to use those instead.
+
+
 Agent-driven product demo videos. Point it at a URL with a list of steps; get back a
 customer-ready MP4 that looks **edited, not raw** — the recording inset on a blurred backdrop with
 rounded corners and a drop shadow, one synthetic cursor, click ripples, click-focused zoom, and

@@ -9,10 +9,15 @@ Works on three sources, all through the same pipeline:
 
 | what you are demoing | command |
 | --- | --- |
-| a web app | `bin/demokit flows/<name>.json out.mp4` (write a flow — §7) |
-| a web app, with a **real cursor** | `bin/demokit box flows/<name>.json out.mp4` — needs Docker |
-| a CLI or a script | `bin/demokit term "<shell command>" out.mp4` |
-| a native app or the desktop | `bin/demokit screen out.mp4 --seconds 30` |
+| a web app — **the default** | `demokit local flows/<name>.json out.mp4` (write a flow — §7). Headless Chromium demokit launches itself; no Docker, no extension |
+| a web app, through your own signed-in Chrome | `demokit --session <id> flows/<name>.json out.mp4` — needs the playwriter extension |
+| a web app, real X11 pointer in a container | `demokit box flows/<name>.json out.mp4` — needs Docker; only if you want it |
+| a CLI or a script | `demokit term "<shell command>" out.mp4` (drawn window) or `demokit termreal spec.json out.mp4` (your real Terminal, filmed) |
+| a native app or the desktop | `demokit screen out.mp4 --seconds 30` |
+
+Install: `npm install -g @improdead/demokit` and `pip3 install pillow numpy`. The first recording
+downloads a headless Chromium once. Everything else — a static ffmpeg included — comes with the
+package.
 
 For anything behind a login, `box` needs the session carried in — it starts with
 an empty profile. Export the cookies from a browser that is already signed in and
@@ -20,13 +25,14 @@ point `DEMOKIT_COOKIES` at the file; they are injected over CDP before the first
 navigation, so no password is ever handled and nothing is written outside the
 gitignored `.cache`.
 
-`box` is the best of the three when Docker is available: Chromium inside a
-container with Xvfb and a window manager, so the pointer is a **real X11 cursor**
-moved by xdotool and the chrome is a **real browser window** — nothing is drawn,
-and it still runs in the background because the display does not physically
-exist. The flow is driven over CDP (a bounding box is the only honest way to
-know where a thing is) while xdotool puts the visible pointer on the same
-coordinates, so the cursor you see and the click that lands are one event.
+`local` is the default because the two things the container used to provide are
+no longer taken from it: the Cap-style renderer (§9) **draws** the cursor from
+the recorded pointer track with the recorded shape, and **draws** the window
+chrome. What is left is a browser rendering a page, which headless Chromium does
+in the background with the machine's own fonts — better than the container's
+Linux set. `box` remains for a real X11 pointer in the raw frames, at the cost of
+a 2GB image, and its flows say `zoom: 1` because that display is already 2x; the
+local recorder never records below 2x for that reason.
 
 `term` runs the command in a pty and paints the frames itself — nothing is
 displayed, so it records in the background while the machine is being used, and

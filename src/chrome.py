@@ -124,7 +124,7 @@ def main():
     url = opt("--url", "")
     if not url:
         url = "localhost"
-    title = opt("--title", url.split("/")[0])
+    title = opt("--title", (man.get("pageTitle") or "").strip() or url.split("/")[0])
     tabs = (opt("--tabs") or title).split("|")
     theme = opt("--theme", "light")
 
@@ -142,11 +142,17 @@ def main():
     # detaches from the page and the zoom frames the toolbar instead.
     man["height"] = man["height"] + ch
     man["chrome"] = {"h": ch, "url": url, "theme": theme}
-    for key in ("clicks", "path", "actions", "events"):
+    for key in ("clicks", "path", "actions", "events", "pointer"):
         for e in man.get(key, []):
             e["y"] = e["y"] + ch
             if "by" in e:            # events carry the element box too
                 e["by"] = e["by"] + ch
+    # The per-step proof carries the clicked element's region, in frame px.
+    for pr in man.get("proof", []):
+        if pr.get("region"):
+            pr["region"] = [pr["region"][0], pr["region"][1] + ch, pr["region"][2], pr["region"][3]]
+    # A drawn chrome IS the window's top; the engine must not add a second bar.
+    man["deco"] = {"top": 0, "left": 0}
     json.dump(man, open(man_path, "w"), indent=1)
     print(f"chrome: {len(files)} frames, +{ch}px {theme} chrome, url={url}")
 

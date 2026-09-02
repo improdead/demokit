@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # demokit — flow JSON in, demo MP4 out.
 #
-#   bin/demokit probe <url>                              # look before you plan
+#   bin/demokit local flows/x.json out.mp4               # DEFAULT: headless Chromium, no Docker
+#   bin/demokit probe <url>                              # look before you plan (needs playwriter)
 #   bin/demokit box flows/x.json out.mp4                 # real cursor, in a container
 #   bin/demokit term "pytest -q" out.mp4                 # a terminal, drawn offscreen
 #   bin/demokit termreal spec.json out.mp4               # a REAL recording of Terminal.app
@@ -20,17 +21,43 @@
 # Must run from the demokit directory: playwriter's sandbox scopes file writes
 # to the session's cwd, so a session created elsewhere cannot write frames here.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# Under `npm install -g` this script is a symlink in the global bin dir, so
+# dirname "$0" is the wrong place. Resolve the link, keep the caller's cwd for
+# THEIR paths, and keep work files in their directory rather than inside the
+# package.
+CALLER_PWD="$PWD"
+SELF="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+cd "$(dirname "$SELF")/.."
+abs() { case "$1" in /*) printf '%s\n' "$1";; *) printf '%s\n' "$CALLER_PWD/$1";; esac; }
+export DEMOKIT_WORK="${DEMOKIT_WORK:-$CALLER_PWD/.demokit}"
+[ -n "${DEMOKIT_COOKIES:-}" ] && export DEMOKIT_COOKIES="$(abs "$DEMOKIT_COOKIES")"
+mkdir -p "$DEMOKIT_WORK"
 export PATH="$HOME/.local/bin:$PATH"
 
 die() { echo "demokit: $*" >&2; exit 1; }
 
-command -v node >/dev/null || die "node not found"
-command -v playwriter >/dev/null || die "playwriter not found (npm i -g playwriter)"
-if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-  die "ffmpeg/ffprobe not on PATH. Run: (cd .tools && npm i)"
+command -v node >/dev/null || die "node not found (https://nodejs.org, 18+)"
+ROOT="$(pwd)"
+# ffmpeg: the package ships a static build; a system one is used if present.
+# Resolve dependencies the way Node does, from the package root. When npm
+# installs this package its dependencies are HOISTED to the parent node_modules,
+# so looking only inside this directory finds nothing. `require.resolve` walks up.
+resolve_dep() { node -e "try{console.log(require.resolve(process.argv[1],{paths:[process.argv[2]]}))}catch(e){}" "$1" "$ROOT" 2>/dev/null; }
+if ! command -v ffmpeg >/dev/null; then
+  FF="$(resolve_dep ffmpeg-static)"; [ -n "$FF" ] && export PATH="$(dirname "$(node -e "console.log(require(process.argv[1]))" "$FF")"):$PATH"
 fi
-[ -d .tools/node_modules ] || die "dependencies missing. Run: (cd .tools && npm i)"
+if ! command -v ffprobe >/dev/null; then
+  FP="$(resolve_dep ffprobe-static)"; [ -n "$FP" ] && export PATH="$(dirname "$(node -e "console.log(require(process.argv[1]).path)" "$FP")"):$PATH"
+fi
+if [ -z "${DEMOKIT_PW:-}" ]; then
+  PWC="$(resolve_dep playwright-core/package.json)"; [ -n "$PWC" ] && export DEMOKIT_PW="$(dirname "$PWC")"
+  [ -z "${DEMOKIT_PW:-}" ] && [ -d "$ROOT/.tools/node_modules/playwright-core" ] && export DEMOKIT_PW="$ROOT/.tools/node_modules/playwright-core"
+fi
+command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || die "ffmpeg/ffprobe not found. Run: npm install   (in the demokit directory)"
+# The renderer is Python: Pillow + numpy. Say exactly what to do if they are missing.
+python3 -c "import PIL, numpy" 2>/dev/null || die "python3 with Pillow and numpy is required for rendering. Run: pip3 install pillow numpy"
+# playwriter is only needed for `probe` and the --session path (recording through the user's own Chrome).
+need_playwriter() { command -v playwriter >/dev/null || die "this path records through your own Chrome and needs playwriter (npm i -g playwriter). The default path does not - run: bin/demokit local <flow.json> <out.mp4>"; }
 
 # record.js/probe.js use top-level await and run inside playwriter's sandbox, so
 # `node --check` (CommonJS) rejects them. Validate them as async bodies instead.
@@ -81,6 +108,7 @@ if [ "${1:-}" = "probe" ]; then
   shift; URL="${1:?usage: demokit probe <url>}"
   ensure_session
   write_args "url=$URL"
+  need_playwriter
   exec playwriter -s "$SESSION" --timeout 180000 -f src/probe.js
 fi
 
@@ -88,8 +116,8 @@ fi
 # itself. Never touches the display, so it works in the background.
 if [ "${1:-}" = "term" ]; then
   shift; CMD="${1:?usage: demokit term \"<shell command>\" <out.mp4> [--cols N --rows N --title T] [render flags]}"; shift
-  OUT="${1:?usage: demokit term \"<cmd>\" <out.mp4>}"; shift
-  SHOT=".cache/shot-term"
+  OUT="$(abs "${1:?usage: demokit term \"<cmd>\" <out.mp4>}")"; shift
+  SHOT="$DEMOKIT_WORK/shot-term"
   TERMARGS=(); RENDARGS=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -107,9 +135,9 @@ fi
 # cannot be used while it records - and needs Accessibility permission, and in
 # exchange every pixel is real, chrome and font rendering included.
 if [ "${1:-}" = "termreal" ]; then
-  shift; SPEC="${1:?usage: demokit termreal <spec.json> <out.mp4> [--seconds N] [render flags]}"; shift
-  OUT="${1:?usage: demokit termreal <spec.json> <out.mp4>}"; shift
-  SHOT=".cache/shot-termreal"
+  shift; SPEC="$(abs "${1:?usage: demokit termreal <spec.json> <out.mp4> [--seconds N] [render flags]}")"; shift
+  OUT="$(abs "${1:?usage: demokit termreal <spec.json> <out.mp4>}")"; shift
+  SHOT="$DEMOKIT_WORK/shot-termreal"
   SECS=18; FILL=0.80; RENDARGS=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -141,8 +169,8 @@ fi
 # Screen recording of a display or a region, for native apps that are not a
 # terminal. Uses macOS screencapture, which already holds the permission.
 if [ "${1:-}" = "screen" ]; then
-  shift; OUT="${1:?usage: demokit screen <out.mp4> --seconds N [--region x,y,w,h] [--display 1]}"; shift
-  SHOT=".cache/shot-screen"
+  shift; OUT="$(abs "${1:?usage: demokit screen <out.mp4> --seconds N [--region x,y,w,h] [--display 1]}")"; shift
+  SHOT="$DEMOKIT_WORK/shot-screen"
   SCRARGS=(); RENDARGS=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -159,40 +187,59 @@ fi
 # a demo of the wrong thing.
 # Inspect or regenerate the edit decision list without touching the recording.
 if [ "${1:-}" = "edit" ]; then
-  shift; SHOT="${1:?usage: demokit edit <shotDir> [--print] [--max N] [--gap MS] [--pad F]}"; shift
+  shift; SHOT="$(abs "${1:?usage: demokit edit <shotDir> [--print] [--max N] [--gap MS] [--pad F]}")"; shift
   exec node src/edit.mjs "$SHOT" "$@"
 fi
 
 # Build the pack an agent watches, and apply what it decided.
 # What did we actually record, before any edit had an opinion about it.
 if [ "${1:-}" = "raw" ]; then
-  shift; SHOT="${1:?usage: demokit raw <shotDir> [--n 12]}"; shift
+  shift; SHOT="$(abs "${1:?usage: demokit raw <shotDir> [--n 12]}")"; shift
   exec node src/raw.mjs "$SHOT" "$@"
 fi
 
 # Where is nothing happening.
 if [ "${1:-}" = "still" ]; then
-  shift; SHOT="${1:?usage: demokit still <shotDir> [--sec 3]}"; shift
+  shift; SHOT="$(abs "${1:?usage: demokit still <shotDir> [--sec 3]}")"; shift
   exec node src/still.mjs "$SHOT" "$@"
 fi
 
 if [ "${1:-}" = "verify" ]; then
-  shift; SHOT="${1:?usage: demokit verify <shotDir> [out.mp4]}"; shift
+  shift; SHOT="$(abs "${1:?usage: demokit verify <shotDir> [out.mp4]}")"; shift
   exec node src/verify.mjs "$SHOT" "$@"
 fi
 
 if [ "${1:-}" = "critic" ]; then
-  shift; SHOT="${1:?usage: demokit critic <shotDir> <out.mp4> [--apply patch.json]}"; shift
-  OUT="${1:?usage: demokit critic <shotDir> <out.mp4>}"; shift
+  shift; SHOT="$(abs "${1:?usage: demokit critic <shotDir> <out.mp4> [--apply patch.json]}")"; shift
+  OUT="$(abs "${1:?usage: demokit critic <shotDir> <out.mp4>}")"; shift
   exec node src/critic.mjs "$SHOT" "$OUT" "$@"
+fi
+
+# The default: a headless Chromium demokit launches itself. No Docker, no
+# extension, no display. The engine draws the cursor and the window chrome.
+if [ "${1:-}" = "local" ]; then
+  shift; FLOW="$(abs "${1:?usage: demokit local <flow.json> <out.mp4> [render flags]}")"; shift
+  OUT="$(abs "${1:?usage: demokit local <flow.json> <out.mp4>}")"; shift
+  SHOT="$DEMOKIT_WORK/shot-$(basename "$FLOW" .json)"
+  # First run only: fetch the headless Chromium that matches the bundled playwright-core.
+  if [ -n "${DEMOKIT_PW:-}" ] && ! node -e "
+    const {chromium}=require(process.argv[1]); const p=chromium.executablePath(); require('fs').accessSync(p);" "$DEMOKIT_PW" 2>/dev/null; then
+    echo "demokit: downloading Chromium (first run only, ~100MB)..."
+    node "$DEMOKIT_PW/cli.js" install chromium-headless-shell || die "could not download Chromium"
+  fi
+  node src/localcap.mjs "$FLOW" "$SHOT" || exit $?
+  HOST="$(python3 -c 'import json,sys;from urllib.parse import urlparse;u=urlparse(json.load(open(sys.argv[1]))["url"]);print(u.netloc+u.path)' "$FLOW" 2>/dev/null || echo localhost)"
+  TITLE="$(python3 -c 'import json,sys;f=json.load(open(sys.argv[1]));print(f.get("title") or f.get("_title") or "")' "$FLOW" 2>/dev/null)"
+  python3 src/chrome.py "$SHOT" --url "$HOST" ${TITLE:+--title "$TITLE"} || exit $?
+  exec node src/demo.mjs "$SHOT" "$OUT" "$@"
 fi
 
 # Browser capture inside a container with a real desktop: real X11 cursor, real
 # window chrome, and it runs on a display that does not physically exist.
 if [ "${1:-}" = "box" ]; then
-  shift; FLOW="${1:?usage: demokit box <flow.json> <out.mp4> [--size WxH] [render flags]}"; shift
-  OUT="${1:?usage: demokit box <flow.json> <out.mp4>}"; shift
-  SHOT=".cache/shot-box"
+  shift; FLOW="$(abs "${1:?usage: demokit box <flow.json> <out.mp4> [--size WxH] [render flags]}")"; shift
+  OUT="$(abs "${1:?usage: demokit box <flow.json> <out.mp4>}")"; shift
+  SHOT="$DEMOKIT_WORK/shot-box"
   BOXARGS=(); RENDARGS=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -214,8 +261,8 @@ if [ "${1:-}" = "wallpapers" ]; then
 fi
 
 if [ "${1:-}" = "review" ]; then
-  shift; SHOT="${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}"; shift
-  OUT="${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}"; shift
+  shift; SHOT="$(abs "${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}")"; shift
+  OUT="$(abs "${1:?usage: demokit review <shotDir> <out.mp4> [--fix]}")"; shift
   exec node src/review.mjs "$SHOT" "$OUT" "$@"
 fi
 
@@ -234,10 +281,11 @@ ensure_session
 # One shot dir per flow: a shared .cache/shot means capturing a second flow
 # destroys the first one's frames, and --render-only silently re-renders the
 # wrong take.
-SHOT=".cache/shot-$(basename "$FLOW" .json)"
+SHOT="$DEMOKIT_WORK/shot-$(basename "$FLOW" .json)"
 write_args "flow=$FLOW" "out=$SHOT"
 
 echo "demokit: capturing $FLOW"
+need_playwriter
 playwriter -s "$SESSION" --timeout 300000 -f src/record.js
 
 [ -f "$SHOT/manifest.json" ] || die "capture produced nothing (preflight may have failed above)"

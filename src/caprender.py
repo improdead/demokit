@@ -508,16 +508,55 @@ def load_assets(assets_dir):
                 if os.path.exists(cand):
                     cursors[cid] = (Image.open(cand).convert('RGBA'), c['hotspot']['x'], c['hotspot']['y'])
                     break
+    # Drawn fallbacks, sized like macOS's own: an arrow, a pointing hand, an
+    # I-beam. They are vectors, so nothing that is Apple's or Cap's ships.
     if '0' not in cursors:
-        p = os.path.join(ROOT, 'vendor', 'Cap', 'apps', 'cli', 'skill', 'cap-demo', 'assets', 'cursor_0.png')
-        if os.path.exists(p):
-            cursors['0'] = (Image.open(p).convert('RGBA'), 0.1786, 0.125)
+        cursors['0'] = (vector_arrow(), 0.17, 0.09)
+    if '1' not in cursors:
+        cursors['1'] = (vector_hand(), 0.40, 0.12)
+    if '2' not in cursors:
+        cursors['2'] = (vector_ibeam(), 0.5, 0.5)
     wall = None
     for n in ('desktop-background.jpg', 'desktop-background.png', 'wallpaper.jpg'):
         p = os.path.join(assets_dir, n)
         if os.path.exists(p):
             wall = Image.open(p).convert('RGB'); break
+    if wall is None:
+        # Cache the converted system wallpaper in the WORK dir, never inside an
+        # installed package.
+        wall = system_wallpaper(os.path.join(os.environ.get('DEMOKIT_WORK') or os.path.dirname(assets_dir), 'wallpaper'))
     return cursors, wall
+
+
+# Nothing is shipped: Cap's default is the desktop wallpaper, and Apple's are
+# already on every Mac. Read one at runtime (converted once with sips into the
+# cache); anywhere else, a quiet gradient. Never redistribute a wallpaper.
+SYSTEM_WALLPAPERS = ['Sonoma.heic', 'Sonoma Horizon.heic', 'Sequoia Sunrise.heic', 'Tahoe Day.heic', 'Radial Sky Blue.heic',
+                     'Ventura.heic', 'Monterey.heic', 'Big Sur.heic', 'Catalina.heic']
+
+
+def system_wallpaper(cache_dir):
+    d = '/System/Library/Desktop Pictures'
+    if not os.path.isdir(d):
+        return None
+    names = SYSTEM_WALLPAPERS + sorted(n for n in os.listdir(d) if n.lower().endswith('.heic'))
+    for n in names:
+        src = os.path.join(d, n)
+        if not os.path.exists(src):
+            continue
+        os.makedirs(cache_dir, exist_ok=True)
+        out = os.path.join(cache_dir, 'system-' + n.rsplit('.', 1)[0].lower().replace(' ', '-') + '.jpg')
+        if not os.path.exists(out):
+            try:
+                subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '92', '-Z', '3840', src, '--out', out],
+                               check=True, capture_output=True)
+            except Exception:
+                continue
+        try:
+            return Image.open(out).convert('RGB')
+        except Exception:
+            continue
+    return None
 
 
 def title_bar(sample, w, h):
@@ -543,6 +582,49 @@ def title_bar(sample, w, h):
     return bar
 
 
+def _outlined(w, h, draw_fn, stroke=(0, 0, 0, 255), fill=(255, 255, 255, 255), width=10):
+    """Draw a shape with a black outline and a white body at 8x, then downsample."""
+    from PIL import ImageDraw
+    S = 4
+    im = Image.new('RGBA', (w * S, h * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    draw_fn(d, S, stroke, fill, width * S // 4)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def vector_arrow():
+    def f(d, S, stroke, fill, w):
+        pts = [(48, 34), (48, 232), (98, 185), (140, 270), (172, 254), (130, 170), (200, 170)]
+        pts = [(x * S / 280 * 280 / 280, y * S / 400 * 400 / 400) for x, y in pts]
+        pts = [(x * S, y * S) for x, y in [(p[0] / S, p[1] / S) for p in pts]]
+        d.polygon(pts, fill=(0, 0, 0, 255))
+        d.line(pts + [pts[0]], fill=(255, 255, 255, 255), width=w, joint='curve')
+    return _outlined(280, 400, f)
+
+
+def vector_hand():
+    def f(d, S, stroke, fill, w):
+        # palm + index finger, the macOS pointing hand read at a glance
+        d.rounded_rectangle([18 * S, 30 * S, 46 * S, 60 * S], radius=8 * S, fill=fill, outline=stroke, width=w)
+        d.rounded_rectangle([24 * S, 4 * S, 32 * S, 40 * S], radius=4 * S, fill=fill, outline=stroke, width=w)
+        d.rounded_rectangle([33 * S, 16 * S, 40 * S, 40 * S], radius=3 * S, fill=fill, outline=stroke, width=w)
+        d.rounded_rectangle([41 * S, 20 * S, 47 * S, 42 * S], radius=3 * S, fill=fill, outline=stroke, width=w)
+        d.rounded_rectangle([12 * S, 30 * S, 22 * S, 48 * S], radius=4 * S, fill=fill, outline=stroke, width=w)
+        d.rounded_rectangle([20 * S, 36 * S, 46 * S, 60 * S], radius=8 * S, fill=fill)
+    return _outlined(64, 64, f)
+
+
+def vector_ibeam():
+    def f(d, S, stroke, fill, w):
+        cx = 115 * S
+        d.rectangle([cx - 8 * S, 24 * S, cx + 8 * S, 196 * S], fill=stroke)
+        d.rectangle([cx - 6 * S, 26 * S, cx + 6 * S, 194 * S], fill=fill)
+        for y in (24, 196):
+            d.rectangle([cx - 34 * S, (y - 8) * S, cx + 34 * S, (y + 8) * S], fill=stroke)
+            d.rectangle([cx - 32 * S, (y - 6) * S, cx + 32 * S, (y + 6) * S], fill=fill)
+    return _outlined(230, 220, f)
+
+
 def cover(im, W, H):
     s = max(W / im.width, H / im.height)
     r = im.resize((max(W, int(im.width * s + 0.5)), max(H, int(im.height * s + 0.5))), Image.LANCZOS)
@@ -560,7 +642,9 @@ def main():
         return argv[argv.index(n) + 1] if n in argv else d
 
     W, H, FPS = int(opt('--w', 3840)), int(opt('--h', 2160)), int(opt('--fps', 30))
-    assets_dir = opt('--assets', os.path.join(ROOT, '.cache', 'cap'))
+    work = os.environ.get('DEMOKIT_WORK')
+    default_assets = os.path.join(work, 'cap') if work and os.path.isdir(os.path.join(work, 'cap')) else os.path.join(ROOT, '.cache', 'cap')
+    assets_dir = opt('--assets', default_assets)
     cfg_p = opt('--config', os.path.join(assets_dir, 'project-config.json'))
     cap = json.load(open(cfg_p)) if os.path.exists(cfg_p) else {}
     bg = cap.get('background', {})
@@ -582,10 +666,11 @@ def main():
     if not frames:
         sys.exit('no frames')
     trim = int((man.get('deco') or {}).get('top', 0))
-    bar_h = (int(round(man['height'] * 0.0235)) & ~1) if trim > 0 and '--no-maclights' not in argv else 0
+    has_chrome = bool(man.get('chrome'))          # chrome.py drew the window top already
+    bar_h = (int(round(man['height'] * 0.0235)) & ~1) if trim > 0 and not has_chrome and '--no-maclights' not in argv else 0
     src_w, src_h = int(man['width']), int(man['height']) - trim + bar_h
     screen_h = float(man.get('screenH') or (man['height'] + 274))   # X display height, for cursor_height_px
-    fdir = os.path.join(shot, 'frames')
+    fdir = os.path.join(shot, 'frames-chrome') if os.path.isdir(os.path.join(shot, 'frames-chrome')) else os.path.join(shot, 'frames')
     duration_ms = frames[-1]['ms']
 
     # ---- events -> Cap's shapes ------------------------------------------
@@ -638,11 +723,23 @@ def main():
 
     # ---- encode ---------------------------------------------------------------
     n_out = int(duration_ms / 1000.0 * FPS) + 1
-    enc = subprocess.Popen(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+    os.makedirs(os.path.dirname(os.path.abspath(out)) or '.', exist_ok=True)
+    enc = subprocess.Popen([os.environ.get('DEMOKIT_FFMPEG', 'ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error',
                             '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
                             '-c:v', 'libx264', '-preset', 'slower', '-crf', '15',
                             '-x264-params', 'aq-mode=3:psy-rd=0.4:deblock=-1,-1',
-                            '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], stdin=subprocess.PIPE)
+                            '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out],
+                           stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def push(buf):
+        # A broken pipe means ffmpeg is gone. Say why, with its own words, instead
+        # of a BrokenPipeError with no context - which is what a missing output
+        # directory looked like from a fresh install.
+        try:
+            enc.stdin.write(buf)
+        except BrokenPipeError:
+            err = enc.stderr.read().decode('utf-8', 'replace').strip() if enc.stderr else ''
+            sys.exit(f'caprender: ffmpeg exited early ({enc.poll()}): {err or "no message"}')
 
     xs_full = np.arange(W) + 0.5
     ys_full = np.arange(H) + 0.5
@@ -720,7 +817,11 @@ def main():
                     img, hx, hy = cur
                     ct = click_t(clicks, t_ms)
                     scale_click = ct * 1.0 + (1.0 - ct) * CLICK_SHRINK_SIZE
-                    size = STANDARD_CURSOR_HEIGHT * (screen_h / 1080.0) * (qh / src_h) * (cursor_size / 100.0) * scale_click
+                    # cursor_height_px for a display recording collapses to 60px per
+                    # 1080px of the DISPLAY as shown (screen_h / crop_h cancel), which
+                    # is what keeps the cursor the same share of the card at any capture
+                    # resolution - a headless 3200px page and a 4288px X display alike.
+                    size = STANDARD_CURSOR_HEIGHT * (qh / 1080.0) * (cursor_size / 100.0) * scale_click
                     asp = img.width / img.height
                     if asp > 1.0:
                         cw, ch = size, size / asp
@@ -758,12 +859,15 @@ def main():
                         reg *= (1.0 - a)
                         reg += sa[:, :, :3] * a
 
-        enc.stdin.write(np.clip(frame, 0, 255).astype(np.uint8).tobytes())
+        push(np.clip(frame, 0, 255).astype(np.uint8).tobytes())
         if k % 60 == 0:
             print(f'caprender: {k}/{n_out}  t={t_ms/1000:.1f}s  zoom {amt:.2f}x', file=sys.stderr)
 
     enc.stdin.close()
-    enc.wait()
+    rc = enc.wait()
+    if rc != 0:
+        err = enc.stderr.read().decode('utf-8', 'replace').strip() if enc.stderr else ''
+        sys.exit(f'caprender: ffmpeg failed ({rc}): {err or "no message"}')
     json.dump({'segments': segs, 'clusters': clusters, 'layout': {'disp': [disp_x, disp_y, disp_w, disp_h], 'pad': pad,
                'rounding_px': rounding_rest}, 'frames': n_out}, open(os.path.join(shot, 'cap-timeline.json'), 'w'), indent=1)
     print(f'caprender: {n_out} frames -> {out}; {len(segs)} zoom segment(s): '
