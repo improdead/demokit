@@ -22,6 +22,10 @@ import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { stillness } from './still.mjs';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 
 export async function rawSheet(shotDir, { n = 12, out = null } = {}) {
@@ -60,10 +64,6 @@ export async function rawSheet(shotDir, { n = 12, out = null } = {}) {
   mkdirSync(join(shotDir), { recursive: true });
   const py = `
 import json, sys
-
-// The Python renderer, as resolved by bin/demokit (a venv when the system
-// interpreter lacks Pillow/numpy).
-const PY = process.env.DEMOKIT_PY || 'python3';
 from PIL import Image, ImageDraw, ImageFont
 picks = json.load(open(sys.argv[1]))
 out = sys.argv[2]

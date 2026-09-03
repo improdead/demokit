@@ -27,6 +27,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node
 import { join } from 'node:path';
 import { verify } from './verify.mjs';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 
 /** Source seconds -> seconds in the finished video, through the pace map. */
@@ -148,10 +152,6 @@ export async function buildPack(shotDir, mp4) {
   const py = `
 from PIL import Image, ImageDraw, ImageFont
 import json
-
-// The Python renderer, as resolved by bin/demokit (a venv when the system
-// interpreter lacks Pillow/numpy).
-const PY = process.env.DEMOKIT_PY || 'python3';
 shots = json.loads(${JSON.stringify(JSON.stringify(shots))})
 W, H = 900, 506
 try: f = ImageFont.truetype("/System/Library/Fonts/Menlo.ttc", 17)

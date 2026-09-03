@@ -32,6 +32,10 @@ import { promisify } from 'node:util';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 
 // A change this small in a region is a cursor or a caret, not a feature.
@@ -75,10 +79,6 @@ async function pixels(jobs, outDir) {
   const py = `
 import json, sys
 import numpy as np
-
-// The Python renderer, as resolved by bin/demokit (a venv when the system
-// interpreter lacks Pillow/numpy).
-const PY = process.env.DEMOKIT_PY || 'python3';
 from PIL import Image, ImageDraw, ImageFont
 jobs = json.load(open(sys.argv[1]))
 try: F = ImageFont.truetype("/System/Library/Fonts/Menlo.ttc", 16)

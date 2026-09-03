@@ -28,6 +28,10 @@ import { promisify } from 'node:util';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 
 const DEFAULTS = {
@@ -88,10 +92,6 @@ function cursorAnchor(path, fromMs, toMs) {
 async function changeTrack(shotDir, man) {
   const py = `
 import json, os, numpy as np
-
-// The Python renderer, as resolved by bin/demokit (a venv when the system
-// interpreter lacks Pillow/numpy).
-const PY = process.env.DEMOKIT_PY || 'python3';
 from PIL import Image
 man = json.load(open(${JSON.stringify(join(shotDir, 'manifest.json'))}))
 frames = man["frames"]

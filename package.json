@@ -1,6 +1,6 @@
 {
   "name": "@dekai/demokit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Agent-native demo videos in one command: plan from the codebase, record a deterministic flow in headless Chromium, render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the feature actually worked. No Docker.",
   "bin": {
     "demokit": "bin/demokit"

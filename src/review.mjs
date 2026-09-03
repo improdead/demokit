@@ -21,6 +21,10 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 
 const TARGET = {
@@ -63,10 +67,6 @@ for f in fs:
     diffs.append(0.0 if prev is None else float(np.abs(a - prev).mean()))
     prev = a
 import json
-
-// The Python renderer, as resolved by bin/demokit (a venv when the system
-// interpreter lacks Pillow/numpy).
-const PY = process.env.DEMOKIT_PY || 'python3';
 first = frames[0]
 print(json.dumps({
   "n": len(fs),
