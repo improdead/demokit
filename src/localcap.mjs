@@ -36,6 +36,7 @@ import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -85,14 +86,23 @@ try {
   }
   throw e;
 }
+// A session saved by `demokit login` (Playwright storageState: cookies +
+// localStorage + IndexedDB) is loaded by host, automatically. It is the seamless
+// path: no extension, no cookie export, one sign-in per app.
+const authDir = join(process.env.DEMOKIT_CACHE || join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'demokit'), 'auth');
+const host = new URL(flow.url).host.replace(/[^a-z0-9.-]/gi, '_');
+const authFile = argOf('auth', process.env.DEMOKIT_AUTH || join(authDir, host + '.json'));
+const useAuth = existsSync(authFile);
 const context = await browser.newContext({
   viewport: { width: W, height: H }, deviceScaleFactor: 1, ignoreHTTPSErrors: true,
+  ...(useAuth ? { storageState: authFile } : {}),
 });
+if (useAuth) console.log(`localcap: using the saved session for ${host} (${authFile})`);
 
-// Carry an authenticated session in without ever handling a password: cookies
-// exported from a signed-in browser, injected before the first navigation.
+// The older path: cookies exported from a signed-in browser, injected before the
+// first navigation. Kept for CI and for `demokit login --from-cookies`.
 const cookieFile = argOf('cookies', process.env.DEMOKIT_COOKIES);
-if (cookieFile && existsSync(cookieFile)) {
+if (!useAuth && cookieFile && existsSync(cookieFile)) {
   const raw = JSON.parse(readFileSync(cookieFile, 'utf8'));
   await context.addCookies(raw.map((c) => ({
     name: c.name, value: c.value, domain: c.domain, path: c.path || '/',
@@ -144,7 +154,7 @@ if (flow.clearStorage === true) {
 // Do not start on a sign-in page.
 const authed = await page.evaluate(() => !/sign in|welcome back|log in|continue with/i.test(document.body.innerText.slice(0, 600))).catch(() => true);
 if (!authed) {
-  console.log('PREFLIGHT FAILED: the page is a sign-in screen. Export cookies from a signed-in browser and set DEMOKIT_COOKIES.');
+  console.log(`PREFLIGHT FAILED: the page is a sign-in screen. Run once:  demokit login ${flow.url}`);
   await browser.close(); process.exit(3);
 }
 

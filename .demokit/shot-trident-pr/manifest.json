@@ -1,0 +1,2518 @@
+{
+ "width": 2880,
+ "height": 1791,
+ "layout": [
+  1440,
+  810
+ ],
+ "zoom": 2,
+ "dsf": 1,
+ "source": "local",
+ "pageTitle": "Inventory \u00b7 Repositories | Trident",
+ "pageUrl": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+ "screenW": 2880,
+ "screenH": 1620,
+ "deco": {
+  "top": 0,
+  "left": 0
+ },
+ "endMs": 13508,
+ "frames": [
+  {
+   "i": 0,
+   "ms": 0
+  },
+  {
+   "i": 1,
+   "ms": 13
+  },
+  {
+   "i": 2,
+   "ms": 62
+  },
+  {
+   "i": 3,
+   "ms": 249
+  },
+  {
+   "i": 4,
+   "ms": 443
+  },
+  {
+   "i": 5,
+   "ms": 630
+  },
+  {
+   "i": 6,
+   "ms": 810
+  },
+  {
+   "i": 7,
+   "ms": 989
+  },
+  {
+   "i": 8,
+   "ms": 1177
+  },
+  {
+   "i": 9,
+   "ms": 1371
+  },
+  {
+   "i": 10,
+   "ms": 1544
+  },
+  {
+   "i": 11,
+   "ms": 1725
+  },
+  {
+   "i": 12,
+   "ms": 1811
+  },
+  {
+   "i": 13,
+   "ms": 1825
+  },
+  {
+   "i": 14,
+   "ms": 1836
+  },
+  {
+   "i": 15,
+   "ms": 1847
+  },
+  {
+   "i": 16,
+   "ms": 1859
+  },
+  {
+   "i": 17,
+   "ms": 1870
+  },
+  {
+   "i": 18,
+   "ms": 1881
+  },
+  {
+   "i": 19,
+   "ms": 1892
+  },
+  {
+   "i": 20,
+   "ms": 1903
+  },
+  {
+   "i": 21,
+   "ms": 1914
+  },
+  {
+   "i": 22,
+   "ms": 1925
+  },
+  {
+   "i": 23,
+   "ms": 1935
+  },
+  {
+   "i": 24,
+   "ms": 1946
+  },
+  {
+   "i": 25,
+   "ms": 1956
+  },
+  {
+   "i": 26,
+   "ms": 1967
+  },
+  {
+   "i": 27,
+   "ms": 1979
+  },
+  {
+   "i": 28,
+   "ms": 1992
+  },
+  {
+   "i": 29,
+   "ms": 2026
+  },
+  {
+   "i": 30,
+   "ms": 2043
+  },
+  {
+   "i": 31,
+   "ms": 2059
+  },
+  {
+   "i": 32,
+   "ms": 2076
+  },
+  {
+   "i": 33,
+   "ms": 2093
+  },
+  {
+   "i": 34,
+   "ms": 2109
+  },
+  {
+   "i": 35,
+   "ms": 2126
+  },
+  {
+   "i": 36,
+   "ms": 2143
+  },
+  {
+   "i": 37,
+   "ms": 2176
+  },
+  {
+   "i": 38,
+   "ms": 2194
+  },
+  {
+   "i": 39,
+   "ms": 2210
+  },
+  {
+   "i": 40,
+   "ms": 2226
+  },
+  {
+   "i": 41,
+   "ms": 2259
+  },
+  {
+   "i": 42,
+   "ms": 2276
+  },
+  {
+   "i": 43,
+   "ms": 2287
+  },
+  {
+   "i": 44,
+   "ms": 2301
+  },
+  {
+   "i": 45,
+   "ms": 2310
+  },
+  {
+   "i": 46,
+   "ms": 2322
+  },
+  {
+   "i": 47,
+   "ms": 2332
+  },
+  {
+   "i": 48,
+   "ms": 2343
+  },
+  {
+   "i": 49,
+   "ms": 2356
+  },
+  {
+   "i": 50,
+   "ms": 2367
+  },
+  {
+   "i": 51,
+   "ms": 2377
+  },
+  {
+   "i": 52,
+   "ms": 2388
+  },
+  {
+   "i": 53,
+   "ms": 2398
+  },
+  {
+   "i": 54,
+   "ms": 2408
+  },
+  {
+   "i": 55,
+   "ms": 2419
+  },
+  {
+   "i": 56,
+   "ms": 2429
+  },
+  {
+   "i": 57,
+   "ms": 2440
+  },
+  {
+   "i": 58,
+   "ms": 2455
+  },
+  {
+   "i": 59,
+   "ms": 2468
+  },
+  {
+   "i": 60,
+   "ms": 2485
+  },
+  {
+   "i": 61,
+   "ms": 2501
+  },
+  {
+   "i": 62,
+   "ms": 2512
+  },
+  {
+   "i": 63,
+   "ms": 2522
+  },
+  {
+   "i": 64,
+   "ms": 2536
+  },
+  {
+   "i": 65,
+   "ms": 2547
+  },
+  {
+   "i": 66,
+   "ms": 2557
+  },
+  {
+   "i": 67,
+   "ms": 2569
+  },
+  {
+   "i": 68,
+   "ms": 2580
+  },
+  {
+   "i": 69,
+   "ms": 2591
+  },
+  {
+   "i": 70,
+   "ms": 2602
+  },
+  {
+   "i": 71,
+   "ms": 2614
+  },
+  {
+   "i": 72,
+   "ms": 2624
+  },
+  {
+   "i": 73,
+   "ms": 2634
+  },
+  {
+   "i": 74,
+   "ms": 2645
+  },
+  {
+   "i": 75,
+   "ms": 2656
+  },
+  {
+   "i": 76,
+   "ms": 2839
+  },
+  {
+   "i": 77,
+   "ms": 3183
+  },
+  {
+   "i": 78,
+   "ms": 3219
+  },
+  {
+   "i": 79,
+   "ms": 3401
+  },
+  {
+   "i": 80,
+   "ms": 3582
+  },
+  {
+   "i": 81,
+   "ms": 3766
+  },
+  {
+   "i": 82,
+   "ms": 3961
+  },
+  {
+   "i": 83,
+   "ms": 4135
+  },
+  {
+   "i": 84,
+   "ms": 4329
+  },
+  {
+   "i": 85,
+   "ms": 4505
+  },
+  {
+   "i": 86,
+   "ms": 4697
+  },
+  {
+   "i": 87,
+   "ms": 4870
+  },
+  {
+   "i": 88,
+   "ms": 5067
+  },
+  {
+   "i": 89,
+   "ms": 5241
+  },
+  {
+   "i": 90,
+   "ms": 5426
+  },
+  {
+   "i": 91,
+   "ms": 5605
+  },
+  {
+   "i": 92,
+   "ms": 5753
+  },
+  {
+   "i": 93,
+   "ms": 5777
+  },
+  {
+   "i": 94,
+   "ms": 5790
+  },
+  {
+   "i": 95,
+   "ms": 5802
+  },
+  {
+   "i": 96,
+   "ms": 5813
+  },
+  {
+   "i": 97,
+   "ms": 5823
+  },
+  {
+   "i": 98,
+   "ms": 5838
+  },
+  {
+   "i": 99,
+   "ms": 5848
+  },
+  {
+   "i": 100,
+   "ms": 5859
+  },
+  {
+   "i": 101,
+   "ms": 5869
+  },
+  {
+   "i": 102,
+   "ms": 5881
+  },
+  {
+   "i": 103,
+   "ms": 5891
+  },
+  {
+   "i": 104,
+   "ms": 5901
+  },
+  {
+   "i": 105,
+   "ms": 5913
+  },
+  {
+   "i": 106,
+   "ms": 5923
+  },
+  {
+   "i": 107,
+   "ms": 5934
+  },
+  {
+   "i": 108,
+   "ms": 5946
+  },
+  {
+   "i": 109,
+   "ms": 5957
+  },
+  {
+   "i": 110,
+   "ms": 5968
+  },
+  {
+   "i": 111,
+   "ms": 5980
+  },
+  {
+   "i": 112,
+   "ms": 5992
+  },
+  {
+   "i": 113,
+   "ms": 6003
+  },
+  {
+   "i": 114,
+   "ms": 6015
+  },
+  {
+   "i": 115,
+   "ms": 6025
+  },
+  {
+   "i": 116,
+   "ms": 6037
+  },
+  {
+   "i": 117,
+   "ms": 6048
+  },
+  {
+   "i": 118,
+   "ms": 6059
+  },
+  {
+   "i": 119,
+   "ms": 6070
+  },
+  {
+   "i": 120,
+   "ms": 6081
+  },
+  {
+   "i": 121,
+   "ms": 6093
+  },
+  {
+   "i": 122,
+   "ms": 6104
+  },
+  {
+   "i": 123,
+   "ms": 6117
+  },
+  {
+   "i": 124,
+   "ms": 6128
+  },
+  {
+   "i": 125,
+   "ms": 6140
+  },
+  {
+   "i": 126,
+   "ms": 6151
+  },
+  {
+   "i": 127,
+   "ms": 6163
+  },
+  {
+   "i": 128,
+   "ms": 6174
+  },
+  {
+   "i": 129,
+   "ms": 6185
+  },
+  {
+   "i": 130,
+   "ms": 6197
+  },
+  {
+   "i": 131,
+   "ms": 6207
+  },
+  {
+   "i": 132,
+   "ms": 6218
+  },
+  {
+   "i": 133,
+   "ms": 6228
+  },
+  {
+   "i": 134,
+   "ms": 6263
+  },
+  {
+   "i": 135,
+   "ms": 6460
+  },
+  {
+   "i": 136,
+   "ms": 6741
+  },
+  {
+   "i": 137,
+   "ms": 6758
+  },
+  {
+   "i": 138,
+   "ms": 6771
+  },
+  {
+   "i": 139,
+   "ms": 6786
+  },
+  {
+   "i": 140,
+   "ms": 6798
+  },
+  {
+   "i": 141,
+   "ms": 6812
+  },
+  {
+   "i": 142,
+   "ms": 6824
+  },
+  {
+   "i": 143,
+   "ms": 6838
+  },
+  {
+   "i": 144,
+   "ms": 6850
+  },
+  {
+   "i": 145,
+   "ms": 6865
+  },
+  {
+   "i": 146,
+   "ms": 6876
+  },
+  {
+   "i": 147,
+   "ms": 6887
+  },
+  {
+   "i": 148,
+   "ms": 6897
+  },
+  {
+   "i": 149,
+   "ms": 6907
+  },
+  {
+   "i": 150,
+   "ms": 6918
+  },
+  {
+   "i": 151,
+   "ms": 6928
+  },
+  {
+   "i": 152,
+   "ms": 6938
+  },
+  {
+   "i": 153,
+   "ms": 6948
+  },
+  {
+   "i": 154,
+   "ms": 6960
+  },
+  {
+   "i": 155,
+   "ms": 6971
+  },
+  {
+   "i": 156,
+   "ms": 6982
+  },
+  {
+   "i": 157,
+   "ms": 6996
+  },
+  {
+   "i": 158,
+   "ms": 7157
+  },
+  {
+   "i": 159,
+   "ms": 7353
+  },
+  {
+   "i": 160,
+   "ms": 7527
+  },
+  {
+   "i": 161,
+   "ms": 7708
+  },
+  {
+   "i": 162,
+   "ms": 7905
+  },
+  {
+   "i": 163,
+   "ms": 8084
+  },
+  {
+   "i": 164,
+   "ms": 8276
+  },
+  {
+   "i": 165,
+   "ms": 8453
+  },
+  {
+   "i": 166,
+   "ms": 8634
+  },
+  {
+   "i": 167,
+   "ms": 8816
+  },
+  {
+   "i": 168,
+   "ms": 8998
+  },
+  {
+   "i": 169,
+   "ms": 9183
+  },
+  {
+   "i": 170,
+   "ms": 9381
+  },
+  {
+   "i": 171,
+   "ms": 9556
+  },
+  {
+   "i": 172,
+   "ms": 9741
+  },
+  {
+   "i": 173,
+   "ms": 9936
+  },
+  {
+   "i": 174,
+   "ms": 10117
+  },
+  {
+   "i": 175,
+   "ms": 10301
+  },
+  {
+   "i": 176,
+   "ms": 10476
+  },
+  {
+   "i": 177,
+   "ms": 10671
+  },
+  {
+   "i": 178,
+   "ms": 10853
+  },
+  {
+   "i": 179,
+   "ms": 11000
+  },
+  {
+   "i": 180,
+   "ms": 11204
+  },
+  {
+   "i": 181,
+   "ms": 11369
+  },
+  {
+   "i": 182,
+   "ms": 11553
+  },
+  {
+   "i": 183,
+   "ms": 11738
+  },
+  {
+   "i": 184,
+   "ms": 11933
+  },
+  {
+   "i": 185,
+   "ms": 12118
+  },
+  {
+   "i": 186,
+   "ms": 12296
+  },
+  {
+   "i": 187,
+   "ms": 12479
+  },
+  {
+   "i": 188,
+   "ms": 12664
+  },
+  {
+   "i": 189,
+   "ms": 12857
+  },
+  {
+   "i": 190,
+   "ms": 13041
+  },
+  {
+   "i": 191,
+   "ms": 13227
+  },
+  {
+   "i": 192,
+   "ms": 13404
+  }
+ ],
+ "events": [
+  {
+   "kind": "click",
+   "t": 2945,
+   "label": "open the review history",
+   "x": 795,
+   "y": 842,
+   "w": 189,
+   "h": 33,
+   "bx": 700,
+   "by": 826,
+   "at": 2952,
+   "up": 3121
+  },
+  {
+   "kind": "click",
+   "t": 6561,
+   "label": "open one review",
+   "x": 1750,
+   "y": 1239,
+   "w": 1988,
+   "h": 72,
+   "bx": 756,
+   "by": 1203,
+   "at": 6563,
+   "up": 6698
+  }
+ ],
+ "clicks": [
+  {
+   "kind": "click",
+   "t": 2945,
+   "label": "open the review history",
+   "x": 795,
+   "y": 842,
+   "w": 189,
+   "h": 33,
+   "bx": 700,
+   "by": 826,
+   "at": 2952,
+   "up": 3121
+  },
+  {
+   "kind": "click",
+   "t": 6561,
+   "label": "open one review",
+   "x": 1750,
+   "y": 1239,
+   "w": 1988,
+   "h": 72,
+   "bx": 756,
+   "by": 1203,
+   "at": 6563,
+   "up": 6698
+  }
+ ],
+ "actions": [
+  {
+   "type": "click",
+   "x": 795,
+   "y": 842,
+   "t": 2952,
+   "label": "open the review history"
+  },
+  {
+   "type": "click",
+   "x": 1750,
+   "y": 1239,
+   "t": 6563,
+   "label": "open one review"
+  }
+ ],
+ "pointer": [
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 0,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1439,
+   "y": 981,
+   "t": 32,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1441,
+   "y": 980,
+   "t": 94,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 155,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 216,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 278,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 339,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 401,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1439,
+   "y": 981,
+   "t": 463,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 525,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1439,
+   "y": 980,
+   "t": 586,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 980,
+   "t": 648,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 710,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 771,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 834,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 895,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 956,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 980,
+   "t": 1018,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1439,
+   "y": 980,
+   "t": 1080,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 1140,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1441,
+   "y": 981,
+   "t": 1202,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 1263,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 980,
+   "t": 1325,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 1387,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 980,
+   "t": 1449,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 982,
+   "t": 1509,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 982,
+   "t": 1572,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 980,
+   "t": 1633,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 1694,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 981,
+   "t": 1756,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1440,
+   "y": 982,
+   "t": 1772,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1437,
+   "y": 985,
+   "t": 1781,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1433,
+   "y": 988,
+   "t": 1809,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1428,
+   "y": 991,
+   "t": 1832,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1421,
+   "y": 994,
+   "t": 1854,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1411,
+   "y": 995,
+   "t": 1888,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1399,
+   "y": 996,
+   "t": 1918,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1385,
+   "y": 997,
+   "t": 1941,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1367,
+   "y": 996,
+   "t": 1965,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1346,
+   "y": 994,
+   "t": 1990,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1323,
+   "y": 992,
+   "t": 2010,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1298,
+   "y": 989,
+   "t": 2027,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1269,
+   "y": 985,
+   "t": 2046,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1239,
+   "y": 980,
+   "t": 2063,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1207,
+   "y": 975,
+   "t": 2077,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1175,
+   "y": 969,
+   "t": 2093,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1141,
+   "y": 963,
+   "t": 2114,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1107,
+   "y": 955,
+   "t": 2141,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1073,
+   "y": 948,
+   "t": 2160,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1040,
+   "y": 940,
+   "t": 2178,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1007,
+   "y": 933,
+   "t": 2194,
+   "cursor_id": "0"
+  },
+  {
+   "x": 976,
+   "y": 925,
+   "t": 2224,
+   "cursor_id": "0"
+  },
+  {
+   "x": 946,
+   "y": 917,
+   "t": 2243,
+   "cursor_id": "0"
+  },
+  {
+   "x": 919,
+   "y": 909,
+   "t": 2260,
+   "cursor_id": "0"
+  },
+  {
+   "x": 894,
+   "y": 902,
+   "t": 2285,
+   "cursor_id": "0"
+  },
+  {
+   "x": 872,
+   "y": 894,
+   "t": 2306,
+   "cursor_id": "0"
+  },
+  {
+   "x": 853,
+   "y": 888,
+   "t": 2328,
+   "cursor_id": "0"
+  },
+  {
+   "x": 836,
+   "y": 881,
+   "t": 2362,
+   "cursor_id": "0"
+  },
+  {
+   "x": 823,
+   "y": 875,
+   "t": 2393,
+   "cursor_id": "0"
+  },
+  {
+   "x": 813,
+   "y": 869,
+   "t": 2414,
+   "cursor_id": "0"
+  },
+  {
+   "x": 806,
+   "y": 864,
+   "t": 2439,
+   "cursor_id": "0"
+  },
+  {
+   "x": 799,
+   "y": 859,
+   "t": 2454,
+   "cursor_id": "0"
+  },
+  {
+   "x": 796,
+   "y": 855,
+   "t": 2473,
+   "cursor_id": "0"
+  },
+  {
+   "x": 794,
+   "y": 850,
+   "t": 2497,
+   "cursor_id": "0"
+  },
+  {
+   "x": 794,
+   "y": 846,
+   "t": 2522,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2541,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2559,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2620,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2684,
+   "cursor_id": "0"
+  },
+  {
+   "x": 794,
+   "y": 842,
+   "t": 2745,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 843,
+   "t": 2806,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2868,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2929,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 2940,
+   "cursor_id": "0"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 2945,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3181,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 3243,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 3305,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3365,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3427,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3489,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3550,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 3611,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 842,
+   "t": 3673,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3733,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 3795,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 3856,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 3917,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 3979,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4040,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4102,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 4164,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 4225,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 4287,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4349,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 4410,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 842,
+   "t": 4471,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4533,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 842,
+   "t": 4595,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4655,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 4717,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 842,
+   "t": 4778,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4840,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 4901,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 4962,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 5024,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 5085,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 5146,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 5207,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 842,
+   "t": 5269,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 842,
+   "t": 5330,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 5391,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 5454,
+   "cursor_id": "1"
+  },
+  {
+   "x": 796,
+   "y": 841,
+   "t": 5514,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 5575,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 5637,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 841,
+   "t": 5699,
+   "cursor_id": "1"
+  },
+  {
+   "x": 795,
+   "y": 842,
+   "t": 5722,
+   "cursor_id": "1"
+  },
+  {
+   "x": 799,
+   "y": 850,
+   "t": 5742,
+   "cursor_id": "0"
+  },
+  {
+   "x": 811,
+   "y": 862,
+   "t": 5762,
+   "cursor_id": "0"
+  },
+  {
+   "x": 836,
+   "y": 878,
+   "t": 5786,
+   "cursor_id": "0"
+  },
+  {
+   "x": 877,
+   "y": 901,
+   "t": 5811,
+   "cursor_id": "0"
+  },
+  {
+   "x": 934,
+   "y": 930,
+   "t": 5832,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1007,
+   "y": 964,
+   "t": 5854,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1092,
+   "y": 1002,
+   "t": 5886,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1184,
+   "y": 1043,
+   "t": 5918,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1282,
+   "y": 1083,
+   "t": 5941,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1379,
+   "y": 1124,
+   "t": 5964,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1470,
+   "y": 1160,
+   "t": 5987,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1553,
+   "y": 1191,
+   "t": 6010,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1622,
+   "y": 1215,
+   "t": 6043,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1674,
+   "y": 1233,
+   "t": 6065,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1710,
+   "y": 1242,
+   "t": 6088,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1734,
+   "y": 1246,
+   "t": 6113,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1746,
+   "y": 1244,
+   "t": 6136,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 6158,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 6174,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 6235,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1749,
+   "y": 1238,
+   "t": 6298,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 6358,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 6419,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 6481,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 6542,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 6556,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 6561,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 6758,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 6820,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 6881,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 6941,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 7004,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 7064,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 7126,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 7187,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 7248,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 7309,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 7371,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 7432,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 7493,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 7555,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 7617,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 7678,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 7741,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 7802,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 7863,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 7926,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 7986,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 8047,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 8109,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8171,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1239,
+   "t": 8232,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 8295,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 8356,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8417,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8481,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8542,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 8603,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8665,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1239,
+   "t": 8726,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8787,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8848,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8908,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 8969,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9032,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 9093,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 9154,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 9216,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9278,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 9339,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9401,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 9463,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1239,
+   "t": 9524,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9587,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 9648,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9709,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 9770,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9831,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 9892,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 9953,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10015,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 10075,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 10136,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 10197,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 10258,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 10320,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10380,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 10442,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 10504,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 10565,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1237,
+   "t": 10626,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10688,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10749,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10811,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 10873,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10899,
+   "cursor_id": "1"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 10968,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11029,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11090,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11152,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 11213,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 11275,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11336,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11398,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 11460,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11521,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 11583,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 11645,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 11706,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 11768,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 11829,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 11890,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 11952,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12013,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12074,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 12136,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 12197,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12259,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 12322,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 12383,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 12444,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12507,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12568,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12629,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 12691,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 12753,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 12814,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12876,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 12938,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 12999,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 13061,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 13122,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 13183,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 13246,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 13308,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1238,
+   "t": 13369,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1751,
+   "y": 1238,
+   "t": 13431,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1237,
+   "t": 13492,
+   "cursor_id": "0"
+  },
+  {
+   "x": 1750,
+   "y": 1239,
+   "t": 13508,
+   "cursor_id": "0"
+  }
+ ],
+ "path": [],
+ "proof": [
+  {
+   "label": "open the review history",
+   "kind": "click",
+   "tMs": 2952,
+   "afterMs": 5733,
+   "region": [
+    700,
+    826,
+    189,
+    33
+   ],
+   "shows": "every pull request Trident has reviewed, newest first",
+   "prove": {
+    "textAppears": [
+     "Succeeded"
+    ]
+   },
+   "expect": {
+    "sel": "text=Succeeded",
+    "ok": true
+   },
+   "before": {
+    "url": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+    "title": "Inventory \u00b7 Repositories | Trident",
+    "rows": 11,
+    "chars": 1043,
+    "digest": -1260084985,
+    "text": "Trident Security Overview Agent Security Surface Pentest Findings 13k Dependencies Cloud Scan history Findings 2.0k Inventory Domains 759 Repositories 5 Cloud accounts 6 Connect Integrations MCP Admin Trident Security / Inventory / Repositories Repositories tridentsecurity \u00b7 1 repository Git connections 0 of 6 reviewed Most active Turn on review for all Not reviewed \u00b7 6 tridentsecurity/trident-bitbucket-smoke Scanned 15d ago 19 open Scan only Scan esprit-labs/Trident Scanned 9d ago 22 open Automatic On demand Off Scan 100 PR reviews 13 fix PRs esprit-labs/Memoire Scanned 13d ago 7 open Automatic On demand Off Scan 4 fix PRs esprit-labs/Not-working-Esprit Never scanned \u2014 Automatic On demand Off Scan esprit-labs/trident-pr-test Never scanned \u2014 Automatic On demand Off Scan improdead/trident-fix-e2e-fixture Never scanned \u2014 Automatic On demand Off Scan Reviewing \u00b7 0 No repository is being rev"
+   },
+   "after": {
+    "url": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+    "title": "Inventory \u00b7 Repositories | Trident",
+    "rows": 16,
+    "chars": 4920,
+    "digest": -181634086,
+    "text": "Trident Security Overview Agent Security Surface Pentest Findings 13k Dependencies Cloud Scan history Findings 2.0k Inventory Domains 759 Repositories 5 Cloud accounts 6 Connect Integrations MCP Admin Trident Security / Inventory / Repositories Repositories tridentsecurity \u00b7 1 repository Git connections 0 of 6 reviewed Most active Turn on review for all Not reviewed \u00b7 6 tridentsecurity/trident-bitbucket-smoke Scanned 15d ago 19 open Scan only Scan esprit-labs/Trident Scanned 9d ago 22 open Automatic On demand Off Scan 100 PR reviews PR review is currently off for this repository. These are the reviews that already ran \u2014 turn it back on in the repository settings to review new pull requests. #1172 No new findings 6d ago Succeeded #1170 1 new 6d ago Succeeded #1170 1 new 6d ago Succeeded #1159 3 new \u00b7 1 pre-existing 6d ago Succeeded #1159 1 new \u00b7 1 pre-existing 7d ago Succeeded #1159 3 new"
+   },
+   "checks": [
+    {
+     "check": "the step visibly changed the product",
+     "ok": true,
+     "detail": "62.5% of the page content is new, rows 11->16, url same"
+    },
+    {
+     "check": "\"Succeeded\" appears",
+     "ok": true,
+     "detail": "on screen now"
+    }
+   ]
+  },
+  {
+   "label": "open one review",
+   "kind": "click",
+   "tMs": 6563,
+   "afterMs": 10907,
+   "region": [
+    756,
+    1203,
+    1988,
+    72
+   ],
+   "shows": "what that review found, and which of it was new",
+   "prove": {
+    "textAppears": [
+     "files changed"
+    ]
+   },
+   "expect": {
+    "sel": "text=files changed",
+    "ok": true
+   },
+   "before": {
+    "url": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+    "title": "Inventory \u00b7 Repositories | Trident",
+    "rows": 16,
+    "chars": 4920,
+    "digest": -181634086,
+    "text": "Trident Security Overview Agent Security Surface Pentest Findings 13k Dependencies Cloud Scan history Findings 2.0k Inventory Domains 759 Repositories 5 Cloud accounts 6 Connect Integrations MCP Admin Trident Security / Inventory / Repositories Repositories tridentsecurity \u00b7 1 repository Git connections 0 of 6 reviewed Most active Turn on review for all Not reviewed \u00b7 6 tridentsecurity/trident-bitbucket-smoke Scanned 15d ago 19 open Scan only Scan esprit-labs/Trident Scanned 9d ago 22 open Automatic On demand Off Scan 100 PR reviews PR review is currently off for this repository. These are the reviews that already ran \u2014 turn it back on in the repository settings to review new pull requests. #1172 No new findings 6d ago Succeeded #1170 1 new 6d ago Succeeded #1170 1 new 6d ago Succeeded #1159 3 new \u00b7 1 pre-existing 6d ago Succeeded #1159 1 new \u00b7 1 pre-existing 7d ago Succeeded #1159 3 new"
+   },
+   "after": {
+    "url": "https://app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+    "title": "Inventory \u00b7 Repositories | Trident",
+    "rows": 12,
+    "chars": 5205,
+    "digest": -1016494712,
+    "text": "Trident Security Overview Agent Security Surface Pentest Findings 13k Dependencies Cloud Scan history Findings 2.0k Inventory Domains 759 Repositories 5 Cloud accounts 6 Connect Integrations MCP Admin Trident Security / Inventory / Repositories Repositories tridentsecurity \u00b7 1 repository Git connections 0 of 6 reviewed Most active Turn on review for all Not reviewed \u00b7 6 tridentsecurity/trident-bitbucket-smoke Scanned 15d ago 19 open Scan only Scan esprit-labs/Trident Scanned 9d ago 22 open Automatic On demand Off Scan 100 PR reviews PR review is currently off for this repository. These are the reviews that already ran \u2014 turn it back on in the repository settings to review new pull requests. #1172 No new findings 6d ago Succeeded #1170 1 new 6d ago Succeeded #1170 1 new 6d ago Succeeded #1159 3 new \u00b7 1 pre-existing 6d ago Succeeded 99 files changed 4b63b4e Open pull request High Dist-tag "
+   },
+   "checks": [
+    {
+     "check": "the step visibly changed the product",
+     "ok": true,
+     "detail": "10.5% of the page content is new, rows 16->12, url same"
+    },
+    {
+     "check": "\"files changed\" appears",
+     "ok": true,
+     "detail": "on screen now"
+    }
+   ]
+  }
+ ],
+ "chrome": {
+  "h": 171,
+  "url": "app.tridentsecurity.io/project/cmq5rtr8e0006jy04tk3a1yty/trident/inventory/repositories",
+  "theme": "light"
+ }
+}

@@ -11,7 +11,7 @@ Works on three sources, all through the same pipeline:
 | --- | --- |
 | a web app — **the default** | `demokit local flows/<name>.json out.mp4` (write a flow — §7). Headless Chromium demokit launches itself; no Docker, no extension |
 | a web app, through your own signed-in Chrome | `demokit --session <id> flows/<name>.json out.mp4` — needs the playwriter extension |
-| a web app, real X11 pointer in a container | `demokit box flows/<name>.json out.mp4` — needs Docker; only if you want it |
+| a web app, real X11 pointer in a container | `demokit box flows/<name>.json out.mp4` — needs Docker; **experimental**, not needed for anything else |
 | a CLI or a script | `demokit term "<shell command>" out.mp4` (drawn window) or `demokit termreal spec.json out.mp4` (your real Terminal, filmed) |
 | a native app or the desktop | `demokit screen out.mp4 --seconds 30` |
 
@@ -227,17 +227,32 @@ Everything below lives in the flow's `seed` block, installed as init scripts **b
 Init scripts survive the `clearStorage` reload; anything you do with `page.evaluate` after load
 does not.
 
-**Session.** `verdict.looksAuthWalled` → record through the user's real Chrome, and pass the
-session explicitly:
+**Session.** `verdict.looksAuthWalled` → sign in once and let every recording reuse it:
 
 ```bash
-playwriter session new                    # from demokit/ — the user clicks the extension on an authed tab
-bin/demokit --session <id> probe <url>
-bin/demokit --session <id> flows/<name>.json out/demo.mp4
+demokit login <url>                       # a real window opens; the user signs in; Enter
+demokit local flows/<name>.json out.mp4   # loads ~/.cache/demokit/auth/<host>.json by host
 ```
 
-Without `--session` the CLI makes its own headless session, which is logged out. Also set
-**`"clearStorage": false`**.
+That file is Playwright's storage state (cookies, localStorage, IndexedDB), written 0600. It
+does **not** carry `sessionStorage` — an app that keeps its token there will still look logged
+out; say so rather than debugging selectors. On a box with no window,
+`demokit login <url> --from-cookies cookies.json`, or `DEMOKIT_COOKIES=cookies.json`.
+
+Three facts that decide this design, checked against primary sources on 2026-09-02:
+
+- **A user's running Chrome cannot be attached to.** Since Chrome 136, `--remote-debugging-port`
+  is ignored on the default profile, deliberately. Only an extension gets in — that is what
+  playwriter is, and `demokit --session <id>` still uses it when the user has it installed.
+- **Never share a browser profile between a headed login and a headless run.** Playwright
+  #35466: on macOS the headless run cannot read the cookies and leaves the profile locked and
+  corrupt. Unfixed. Storage state as a file is Playwright's own documented pattern.
+- **`HeadlessExperimental.beginFrame`** renders frames on demand under virtual time — the only
+  frame-perfect capture Chrome offers, and it exists only in the headless shell (not
+  `--headless=new`). It would replace the repaint heartbeat and the clock alignment outright.
+  Experimental, so it is a spike behind a flag, not the default.
+
+Also set **`"clearStorage": false`** for anything behind a login.
 Otherwise the recorder clears `sessionStorage` and reloads, silently logging out any app that keeps
 its token there — which presents as every selector missing, and gets misdiagnosed as a selector bug.
 

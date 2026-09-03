@@ -1,0 +1,40 @@
+{
+ "sourceDurationSec": 13.434,
+ "segments": [
+  {
+   "start": 0,
+   "end": 0.9,
+   "speed": 1
+  },
+  {
+   "start": 0.9,
+   "end": 2.552,
+   "speed": 2.5
+  },
+  {
+   "start": 2.552,
+   "end": 4.545,
+   "speed": 1
+  },
+  {
+   "start": 4.545,
+   "end": 5.91,
+   "speed": 2.5
+  },
+  {
+   "start": 5.91,
+   "end": 8.511,
+   "speed": 1
+  },
+  {
+   "start": 8.511,
+   "end": 8.748000000000001,
+   "speed": 1
+  },
+  {
+   "start": 8.748000000000001,
+   "end": 13.434,
+   "speed": 1
+  }
+ ]
+}

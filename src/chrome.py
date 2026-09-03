@@ -21,9 +21,29 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-FONTS = ["/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Helvetica.ttc",
-         "/System/Library/Fonts/Supplemental/Arial.ttf"]
-MONO = "/System/Library/Fonts/Menlo.ttc"
+# Fonts, in preference order per platform. Hardcoding the macOS paths made the
+# DEFAULT capture path (which draws this chrome) fail anywhere else - Pillow's
+# load_default() is a bitmap face that ignores the size argument, so the URL bar
+# came out as unreadable specks rather than as an obvious error.
+FONTS = [
+    "/System/Library/Fonts/SFNS.ttf",                                  # macOS
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",                 # Debian/Ubuntu
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",                          # Fedora/Arch
+    "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+]
+MONO_FONTS = [
+    "/System/Library/Fonts/Menlo.ttc",
+    "/System/Library/Fonts/SFNSMono.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+    "C:/Windows/Fonts/consola.ttf",
+]
+MONO = next((p for p in MONO_FONTS if os.path.exists(p)), MONO_FONTS[0])
 
 LIGHT = {
     "bar": (233, 233, 236), "tabbar": (222, 222, 226), "tab": (245, 245, 247),
@@ -38,13 +58,16 @@ DARK = {
 
 
 def font(size, mono=False):
-    for p in ([MONO] if mono else FONTS):
+    for p in (MONO_FONTS if mono else FONTS):
         if os.path.exists(p):
             try:
                 return ImageFont.truetype(p, size)
             except Exception:
                 pass
-    return ImageFont.load_default()
+    # Say so rather than silently drawing specks: load_default ignores `size`.
+    raise SystemExit("chrome: no usable TrueType font found. Install one "
+                     "(Debian/Ubuntu: apt-get install fonts-dejavu-core) "
+                     "or pass --no-chrome to skip the drawn browser chrome.")
 
 
 def build_chrome(w, url, title, tabs, theme):

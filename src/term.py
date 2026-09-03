@@ -49,10 +49,17 @@ THEME = {
 # the default before it and is the fallback.
 FONT_CANDIDATES = ["/System/Library/Fonts/SFNSMono.ttf",
                    "/System/Library/Fonts/Menlo.ttc",
-                   "/System/Library/Fonts/Monaco.ttf"]
+                   "/System/Library/Fonts/Monaco.ttf",
+                   "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                   "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                   "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+                   "C:/Windows/Fonts/consola.ttf"]
 # SF Pro. The title of a macOS window is never set in the terminal's own font.
 UI_FONT_CANDIDATES = ["/System/Library/Fonts/SFNS.ttf",
-                      "/System/Library/Fonts/HelveticaNeue.ttc"]
+                      "/System/Library/Fonts/HelveticaNeue.ttc",
+                      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                      "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                      "C:/Windows/Fonts/segoeui.ttf"]
 
 
 class Screen:
@@ -260,7 +267,8 @@ def render(snaps, out_dir, cols, rows, width, title):
             font_path = path
             break
     else:
-        raise SystemExit("term: no monospace font found")
+        raise SystemExit("term: no monospace font found. Install one "
+                         "(Debian/Ubuntu: apt-get install fonts-dejavu-core)")
     ui_font_path = next((p for p in UI_FONT_CANDIDATES if os.path.exists(p)), font_path)
     # SF Mono covers no box-drawing arrows: the prompt character a lot of shells
     # use, U+276F, renders as nothing at all. Menlo has it. Rather than pick one

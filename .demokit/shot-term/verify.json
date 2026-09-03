@@ -1,0 +1,5 @@
+{
+ "outcome": "inconclusive",
+ "steps": [],
+ "why": "the capture recorded no per-step page state, so nothing here can say the product worked. Re-record with a flow whose steps carry `prove`, or accept that this take is unverified."
+}

@@ -23,16 +23,38 @@ DEMOKIT_COOKIES=cookies.json demokit local flows/app.json out/demo.mp4   # behin
 Work files (frames, the edit, the pace map, verification strips) land in `./.demokit/` next to
 where you ran it — add it to `.gitignore`. Set `DEMOKIT_WORK` to put them elsewhere.
 
-For anything behind a login, export cookies from a browser that is already
-signed in and point `DEMOKIT_COOKIES` at the file. They are injected before the
-first navigation; no password is ever handled.
+### Behind a login: sign in once
+
+```bash
+demokit login https://app.example.com      # opens your Chrome; sign in; press Enter
+demokit local flows/app.json out/demo.mp4  # authenticated, headless, from now on
+```
+
+`login` opens a real window (your installed Chrome if you have one), you sign in,
+and it saves the session — cookies, localStorage, IndexedDB — as a Playwright
+storage state under `~/.cache/demokit/auth/<host>.json` (mode 0600, never in a
+project). Every later recording for that host loads it automatically. It expires
+when the app's session does; run `login` again.
+
+For CI, or a machine with no window: `demokit login <url> --from-cookies cookies.json`
+converts a cookie export instead, and `DEMOKIT_COOKIES=cookies.json` still works.
+
+**Why not just record your own running Chrome?** Since Chrome 136 the browser
+ignores `--remote-debugging-port` on the default profile, on purpose — malware
+was using it to lift cookies. The only way into a running Chrome is an extension
+(that is what [playwriter](https://github.com/remorses/playwriter) is; `demokit
+--session` uses it if you have it). And sharing a browser *profile* between a
+headed login and a headless recording is a known unfixed Playwright bug on macOS
+([#35466](https://github.com/microsoft/playwright/issues/35466)). Saving the
+session as a file is Playwright's own documented answer, and it is independent of
+which browser build produced it.
 
 Three capture paths, one renderer:
 
 | path | what it records | needs |
 | --- | --- | --- |
 | `demokit local` | a headless Chromium demokit launches itself — the default | nothing extra |
-| `demokit box` | Chromium inside a Linux container with a real X11 pointer | Docker (2GB image) — only if you want it |
+| `demokit box` | Chromium inside a Linux container with a real X11 pointer | Docker (2GB image). **Experimental**, kept for anyone who wants raw X11 frames; not needed for anything else |
 | `demokit termreal` | your real Terminal.app, filmed | macOS, Screen Recording + Accessibility |
 
 Everything downstream of capture is the same: the Cap-style renderer (spring zoom

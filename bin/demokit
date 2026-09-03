@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # demokit — flow JSON in, demo MP4 out.
 #
+#   bin/demokit login <url>                              # sign in once; recordings reuse it
 #   bin/demokit local flows/x.json out.mp4               # DEFAULT: headless Chromium, no Docker
 #   bin/demokit probe <url>                              # look before you plan (needs playwriter)
 #   bin/demokit box flows/x.json out.mp4                 # real cursor, in a container
@@ -242,6 +243,14 @@ if [ "${1:-}" = "critic" ]; then
   shift; SHOT="$(abs "${1:?usage: demokit critic <shotDir> <out.mp4> [--apply patch.json]}")"; shift
   OUT="$(abs "${1:?usage: demokit critic <shotDir> <out.mp4>}")"; shift
   exec node src/critic.mjs "$SHOT" "$OUT" "$@"
+fi
+
+# Sign in once, in a real window; every recording after that is authenticated.
+if [ "${1:-}" = "login" ]; then
+  shift; URL="${1:?usage: demokit login <url> [--from-cookies cookies.json]}"; shift
+  ARGS=()
+  while [ $# -gt 0 ]; do case "$1" in --from-cookies|--out) ARGS+=("$1" "$(abs "$2")"); shift 2;; *) ARGS+=("$1"); shift;; esac; done
+  exec node src/login.mjs "$URL" "${ARGS[@]+"${ARGS[@]}"}"
 fi
 
 # The default: a headless Chromium demokit launches itself. No Docker, no
