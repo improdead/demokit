@@ -3,12 +3,17 @@
 ## Install
 
 ```bash
-npm install -g @dekai/demokit      # Node 18+; ships a static ffmpeg
-pip3 install pillow numpy              # the renderer is Python
+npm install -g @dekai/demokit
 ```
 
-That is the whole install. No Docker, no browser extension. The first recording
-downloads a headless Chromium (~100MB) once.
+That is the whole install — or skip it entirely and use `npx @dekai/demokit`.
+No Docker, no browser extension, no second command.
+
+The first run provisions what it needs and says so: a headless Chromium
+(~200MB, cached in the Playwright browser cache) and a Python venv for the
+renderer (~43MB, ~4s, cached in `~/.cache/demokit`). Both are one-time and
+shared across projects. A system Python that already has Pillow and numpy is
+used as-is and no venv is created.
 
 ```bash
 demokit local flows/example.json out/demo.mp4          # record + render + verify

@@ -88,6 +88,10 @@ function cursorAnchor(path, fromMs, toMs) {
 async function changeTrack(shotDir, man) {
   const py = `
 import json, os, numpy as np
+
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
 from PIL import Image
 man = json.load(open(${JSON.stringify(join(shotDir, 'manifest.json'))}))
 frames = man["frames"]
@@ -128,7 +132,7 @@ for f in picks:
             })
     prev = cur
 print(json.dumps({"track": out, "ink": inks}))`;
-  const { stdout } = await run('python3', ['-c', py], { maxBuffer: 1 << 28 });
+  const { stdout } = await run(PY, ['-c', py], { maxBuffer: 1 << 28 });
   return JSON.parse(stdout);
 }
 

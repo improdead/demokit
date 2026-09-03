@@ -63,6 +63,10 @@ for f in fs:
     diffs.append(0.0 if prev is None else float(np.abs(a - prev).mean()))
     prev = a
 import json
+
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
 first = frames[0]
 print(json.dumps({
   "n": len(fs),
@@ -70,7 +74,7 @@ print(json.dumps({
   "diffs": [round(d, 3) for d in diffs],
   "changeVsFirst": [round(float(np.abs(f - first).mean()), 2) for f in frames],
 }))`;
-    const { stdout } = await run('python3', ['-c', py], { maxBuffer: 1 << 26 });
+    const { stdout } = await run(PY, ['-c', py], { maxBuffer: 1 << 26 });
     const m = JSON.parse(stdout);
 
     // Tolerance is RELATIVE, not a flat +5px. The detail span shifts with the

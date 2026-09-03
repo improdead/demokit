@@ -54,8 +54,37 @@ if [ -z "${DEMOKIT_PW:-}" ]; then
   [ -z "${DEMOKIT_PW:-}" ] && [ -d "$ROOT/.tools/node_modules/playwright-core" ] && export DEMOKIT_PW="$ROOT/.tools/node_modules/playwright-core"
 fi
 command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || die "ffmpeg/ffprobe not found. Run: npm install   (in the demokit directory)"
-# The renderer is Python: Pillow + numpy. Say exactly what to do if they are missing.
-python3 -c "import PIL, numpy" 2>/dev/null || die "python3 with Pillow and numpy is required for rendering. Run: pip3 install pillow numpy"
+# The renderer is Python (Pillow + numpy). Provision it rather than instructing.
+#
+# Telling someone to run a second command is a second chance to bounce off. A
+# venv with both takes ~4s and 43MB, once, cached outside any project - so the
+# first run just does it and says so. A system python that already has them is
+# used as-is and nothing is created.
+DEMOKIT_CACHE="${DEMOKIT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/demokit}"
+export DEMOKIT_PY=""
+if python3 -c "import PIL, numpy" 2>/dev/null; then
+  export DEMOKIT_PY="python3"
+elif [ -x "$DEMOKIT_CACHE/venv/bin/python" ] && "$DEMOKIT_CACHE/venv/bin/python" -c "import PIL, numpy" 2>/dev/null; then
+  export DEMOKIT_PY="$DEMOKIT_CACHE/venv/bin/python"
+else
+  command -v python3 >/dev/null || die "python3 3.8+ is required (the renderer is Python). Install it from python.org or: brew install python"
+  echo "demokit: setting up the Python renderer (first run only, ~4s)..." >&2
+  mkdir -p "$DEMOKIT_CACHE"
+  rm -rf "$DEMOKIT_CACHE/venv"
+  if command -v uv >/dev/null; then
+    uv venv --quiet "$DEMOKIT_CACHE/venv" >/dev/null 2>&1 \
+      && VIRTUAL_ENV="$DEMOKIT_CACHE/venv" uv pip install --quiet pillow numpy >/dev/null 2>&1
+  else
+    python3 -m venv "$DEMOKIT_CACHE/venv" >/dev/null 2>&1 \
+      && "$DEMOKIT_CACHE/venv/bin/pip" install --quiet --disable-pip-version-check pillow numpy >/dev/null 2>&1
+  fi
+  if [ -x "$DEMOKIT_CACHE/venv/bin/python" ] && "$DEMOKIT_CACHE/venv/bin/python" -c "import PIL, numpy" 2>/dev/null; then
+    export DEMOKIT_PY="$DEMOKIT_CACHE/venv/bin/python"
+    echo "demokit: renderer ready ($DEMOKIT_CACHE/venv)" >&2
+  else
+    die "could not set up the Python renderer. Install the two packages yourself and re-run: python3 -m pip install pillow numpy"
+  fi
+fi
 # playwriter is only needed for `probe` and the --session path (recording through the user's own Chrome).
 need_playwriter() { command -v playwriter >/dev/null || die "this path records through your own Chrome and needs playwriter (npm i -g playwriter). The default path does not - run: bin/demokit local <flow.json> <out.mp4>"; }
 
@@ -125,7 +154,7 @@ if [ "${1:-}" = "term" ]; then
       *) RENDARGS+=("$1"); shift;;
     esac
   done
-  python3 src/term.py "$SHOT" --cmd "$CMD" "${TERMARGS[@]+"${TERMARGS[@]}"}"
+  "$DEMOKIT_PY" src/term.py "$SHOT" --cmd "$CMD" "${TERMARGS[@]+"${TERMARGS[@]}"}"
   exec node src/demo.mjs "$SHOT" "$OUT" "${RENDARGS[@]+"${RENDARGS[@]}"}"
 fi
 
@@ -149,7 +178,7 @@ if [ "${1:-}" = "termreal" ]; then
   # One window, targeted by id from here on: staging one window while the
   # keystrokes go to another films a region bigger than the window, with the
   # desktop showing behind it.
-  PROF="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("prepare",{}).get("profile","Pro"))' "$SPEC")"
+  PROF="$("$DEMOKIT_PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("prepare",{}).get("profile","Pro"))' "$SPEC")"
   SAVED=".cache/term-profile-$PROF.json"
   mkdir -p .cache
   WID="$(node src/termdrive.mjs "$SPEC" --prepare --save "$SAVED")"
@@ -228,9 +257,9 @@ if [ "${1:-}" = "local" ]; then
     node "$DEMOKIT_PW/cli.js" install chromium-headless-shell || die "could not download Chromium"
   fi
   node src/localcap.mjs "$FLOW" "$SHOT" || exit $?
-  HOST="$(python3 -c 'import json,sys;from urllib.parse import urlparse;u=urlparse(json.load(open(sys.argv[1]))["url"]);print(u.netloc+u.path)' "$FLOW" 2>/dev/null || echo localhost)"
-  TITLE="$(python3 -c 'import json,sys;f=json.load(open(sys.argv[1]));print(f.get("title") or f.get("_title") or "")' "$FLOW" 2>/dev/null)"
-  python3 src/chrome.py "$SHOT" --url "$HOST" ${TITLE:+--title "$TITLE"} || exit $?
+  HOST="$("$DEMOKIT_PY" -c 'import json,sys;from urllib.parse import urlparse;u=urlparse(json.load(open(sys.argv[1]))["url"]);print(u.netloc+u.path)' "$FLOW" 2>/dev/null || echo localhost)"
+  TITLE="$("$DEMOKIT_PY" -c 'import json,sys;f=json.load(open(sys.argv[1]));print(f.get("title") or f.get("_title") or "")' "$FLOW" 2>/dev/null)"
+  "$DEMOKIT_PY" src/chrome.py "$SHOT" --url "$HOST" ${TITLE:+--title "$TITLE"} || exit $?
   exec node src/demo.mjs "$SHOT" "$OUT" "$@"
 fi
 

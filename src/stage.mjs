@@ -24,6 +24,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 
 /**
@@ -39,7 +43,7 @@ export async function displaySize(display = 1) {
   const shot = join(dir, 'd.png');
   try {
     await run('screencapture', ['-x', '-t', 'png', '-D', String(display), shot]);
-    const { stdout } = await run('python3', ['-c',
+    const { stdout } = await run(PY, ['-c',
       `from PIL import Image; im=Image.open(${JSON.stringify(shot)}); print(im.width, im.height)`]);
     const [pw, ph] = stdout.trim().split(/\s+/).map(Number);
     // Finder's desktop bounds are the union of all displays, in points.

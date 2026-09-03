@@ -18,6 +18,10 @@ import { promisify } from 'node:util';
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 const even = (v) => (v % 2 ? v + 1 : v);
 
@@ -40,7 +44,7 @@ d.polygon(pts, fill=(255,255,255,255), outline=(28,28,32,255))
 d.line(pts+[pts[0]], fill=(28,28,32,255), width=max(1,int(1.6*s)), joint='curve')
 Image.alpha_composite(sh, im).save(${JSON.stringify(p)})
 print('ok')`;
-  await run('python3', ['-c', py]);
+  await run(PY, ['-c', py]);
   return p;
 }
 
@@ -64,7 +68,7 @@ c=S/2
 d.ellipse([c-${r},c-${r},c+${r},c+${r}], outline=(${color},${a}), width=${w})
 im.save(${JSON.stringify(p)})
 print('ok')`;
-    await run('python3', ['-c', py]);
+    await run(PY, ['-c', py]);
   }
   return paths;
 }
@@ -132,7 +136,7 @@ from PIL import Image
 im = Image.open(${JSON.stringify(framePath)}).convert('L').resize((64, 36))
 px = list(im.getdata())
 print(sum(px) / len(px))`;
-  const { stdout } = await run('python3', ['-c', py]);
+  const { stdout } = await run(PY, ['-c', py]);
   const lum = parseFloat(stdout.trim());
   // A background exists to SEPARATE, not to blend - so pick by contrast against
   // what was actually recorded, and prefer the real macOS wallpapers when they
@@ -177,7 +181,7 @@ export async function makeBackdrop({ dir, w, h, spec, treatBlur = 0.016, treatSa
   if (existsSync(out)) return out;
 
   if (/^[#][0-9a-f]{6}$/i.test(spec)) {
-    await run('python3', ['-c', `
+    await run(PY, ['-c', `
 from PIL import Image
 Image.new('RGB', (${w}, ${h}), ${JSON.stringify(spec)}).save(${JSON.stringify(out)})`]);
     return out;
@@ -186,7 +190,7 @@ Image.new('RGB', (${w}, ${h}), ${JSON.stringify(spec)}).save(${JSON.stringify(ou
     // A real photograph at full contrast fights the UI - the window stops being
     // the subject. Soften, desaturate and dim it a little so it reads as a
     // surface the window is sitting on rather than a second thing to look at.
-    await run('python3', ['-c', `
+    await run(PY, ['-c', `
 from PIL import Image, ImageFilter, ImageEnhance
 im = Image.open(${JSON.stringify(spec)}).convert('RGB')
 tw, th = ${w}, ${h}
@@ -266,7 +270,7 @@ for y in range(H):
         px[x, y] = (max(0, min(255, r_ + n_)), max(0, min(255, g_ + n_)), max(0, min(255, b_ + n_)))
 im.save(${JSON.stringify(out)})
 print('ok')`;
-    await run('python3', ['-c', py], { maxBuffer: 1 << 26 });
+    await run(PY, ['-c', py], { maxBuffer: 1 << 26 });
     return out;
   }
 
@@ -301,7 +305,7 @@ for y in range(0, ${h}):
         g[x, y] = (max(0, min(255, r + n)), max(0, min(255, gg + n)), max(0, min(255, b + n)))
 im.save(${JSON.stringify(out)})
 print('ok')`;
-  await run('python3', ['-c', py]);
+  await run(PY, ['-c', py]);
   return out;
 }
 
@@ -723,6 +727,7 @@ export async function makeTitleBar({ dir, w, h, frame, trimTop = 0 }) {
   const py = `
 from PIL import Image, ImageDraw
 import statistics
+
 src = Image.open(${JSON.stringify(frame)}).convert("RGB")
 w, h = ${w}, ${h}
 # The bar has to be INDISTINGUISHABLE from the tab strip below it. Chrome on
@@ -749,7 +754,7 @@ for i, col in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col,
               outline=tuple(int(c * 0.82) for c in col), width=max(1, int(h * 0.014)))
 im.save(${JSON.stringify(p)})`;
-  await run('python3', ['-c', py]);
+  await run(PY, ['-c', py]);
   return p;
 }
 
@@ -768,6 +773,6 @@ s = Image.new('RGBA',(w+pad*2,h+pad*2),(0,0,0,0))
 ImageDraw.Draw(s).rounded_rectangle([pad,pad+${shadowDy},pad+w-1,pad+h-1+${shadowDy}], radius=r, fill=(0,0,0,${shadowAlpha}))
 s.filter(ImageFilter.GaussianBlur(${shadowBlur})).save(${JSON.stringify(shadow)})
 print('ok')`;
-  await run('python3', ['-c', py]);
+  await run(PY, ['-c', py]);
   return { mask, shadow, pad };
 }

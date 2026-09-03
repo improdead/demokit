@@ -1,7 +1,7 @@
 {
   "name": "@dekai/demokit",
-  "version": "0.1.0",
-  "description": "Agent-native demo videos: plan from the codebase, record a deterministic flow in headless Chromium, render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the feature actually worked.",
+  "version": "0.2.0",
+  "description": "Agent-native demo videos in one command: plan from the codebase, record a deterministic flow in headless Chromium, render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the feature actually worked. No Docker.",
   "bin": {
     "demokit": "bin/demokit"
   },
@@ -27,7 +27,7 @@
     "ffprobe-static": "^3.1.0"
   },
   "scripts": {
-    "postinstall": "node -e \"console.log('demokit: installed. First run downloads a headless Chromium (~100MB). Rendering needs python3 with Pillow and numpy: pip3 install pillow numpy')\""
+    "postinstall": "node -e \"console.log('demokit ready. Run: demokit local <flow.json> <out.mp4>')\""
   },
   "keywords": [
     "demo",

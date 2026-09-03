@@ -148,6 +148,10 @@ export async function buildPack(shotDir, mp4) {
   const py = `
 from PIL import Image, ImageDraw, ImageFont
 import json
+
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
 shots = json.loads(${JSON.stringify(JSON.stringify(shots))})
 W, H = 900, 506
 try: f = ImageFont.truetype("/System/Library/Fonts/Menlo.ttc", 17)
@@ -159,7 +163,7 @@ for i, s in enumerate(shots):
     sheet.paste(Image.open(s["file"]).resize((W, H), Image.LANCZOS), (0, y + 30))
     d.text((10, y + 7), f'{i}. {s["t"]:.1f}s  {s["what"]}'[:100], fill=(240, 150, 150), font=f)
 sheet.save(${JSON.stringify(sheet)})`;
-  await run('python3', ['-c', py], { maxBuffer: 1 << 26 });
+  await run(PY, ['-c', py], { maxBuffer: 1 << 26 });
 
   const inv = invariants(edl, man, recipe);
 

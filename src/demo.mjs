@@ -13,6 +13,10 @@ import { promisify } from 'node:util';
 import { render } from './render.mjs';
 import { pace } from './pace.mjs';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ASSETS = process.env.DEMOKIT_WORK ? join(process.env.DEMOKIT_WORK, '.assets') : resolve('.assets');
 mkdirSync(ASSETS, { recursive: true });   // the Cap engine writes its stage file here; nothing else creates it
@@ -104,7 +108,7 @@ if (arg('edit', 'auto') !== 'off') {
 // default because a Cap recording is what the user pointed at and said "this".
 const ENGINE = arg0('engine', 'cap');
 if (ENGINE !== 'cap' && (man0.path || []).length) {
-  const cur = await runp('python3', [join(HERE, 'cursor.py'), shotDir], { maxBuffer: 1 << 26 });
+  const cur = await runp(PY, [join(HERE, 'cursor.py'), shotDir], { maxBuffer: 1 << 26 });
   process.stdout.write(cur.stdout);
 } else if (ENGINE !== 'cap') {
   console.log('cursor pass: skipped (no pointer path - real cursor is in the frames)');
@@ -114,7 +118,7 @@ if (ENGINE !== 'cap' && (man0.path || []).length) {
 // nothing else; the chrome is what makes it read as an app someone is using.
 // Runs after the cursor pass and shifts every beat down by its own height.
 if (arg('chrome', null) !== null) {
-  const c = await runp('python3', [join(HERE, 'chrome.py'), shotDir,
+  const c = await runp(PY, [join(HERE, 'chrome.py'), shotDir,
     '--url', arg('chrome', 'localhost'),
     ...(arg('tabs', null) ? ['--tabs', arg('tabs')] : []),
     '--theme', arg('chrome-theme', 'light')], { maxBuffer: 1 << 26 });
@@ -128,7 +132,7 @@ if (ENGINE === 'cap') {
     '--fps', String(arg('fps', '30'))];
   if (arg0('cap-config', null)) args.push('--config', arg0('cap-config', null));
   if (arg0('cap-assets', null)) args.push('--assets', arg0('cap-assets', null));
-  const cr = await runp('python3', args, { maxBuffer: 1 << 26 });
+  const cr = await runp(PY, args, { maxBuffer: 1 << 26 });
   process.stdout.write(cr.stdout);
   if (cr.stderr) process.stderr.write(cr.stderr.split('\n').filter((l) => !l.startsWith('caprender:')).join('\n'));
   const edlCap = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, 'utf8')) : { chains: [], zooms: [] };

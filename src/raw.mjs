@@ -60,6 +60,10 @@ export async function rawSheet(shotDir, { n = 12, out = null } = {}) {
   mkdirSync(join(shotDir), { recursive: true });
   const py = `
 import json, sys
+
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
 from PIL import Image, ImageDraw, ImageFont
 picks = json.load(open(sys.argv[1]))
 out = sys.argv[2]
@@ -82,7 +86,7 @@ sheet.save(out)`;
   const spec = join(shotDir, 'raw-picks.json');
   const { writeFileSync } = await import('node:fs');
   writeFileSync(spec, JSON.stringify(picks));
-  await run('python3', ['-c', py, spec, sheet], { maxBuffer: 1 << 26 });
+  await run(PY, ['-c', py, spec, sheet], { maxBuffer: 1 << 26 });
   return { sheet, picks, spans, durationSec: last / 1000 };
 }
 

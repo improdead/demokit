@@ -75,6 +75,10 @@ async function pixels(jobs, outDir) {
   const py = `
 import json, sys
 import numpy as np
+
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
 from PIL import Image, ImageDraw, ImageFont
 jobs = json.load(open(sys.argv[1]))
 try: F = ImageFont.truetype("/System/Library/Fonts/Menlo.ttc", 16)
@@ -140,7 +144,7 @@ print(json.dumps(out))`;
   // on a stdin that is never written and never closed, and the whole pass hangs.
   const jobFile = join(outDir, 'jobs.json');
   writeFileSync(jobFile, JSON.stringify(jobs));
-  const { stdout } = await run('python3', ['-c', py, jobFile], { maxBuffer: 1 << 26 });
+  const { stdout } = await run(PY, ['-c', py, jobFile], { maxBuffer: 1 << 26 });
   return JSON.parse(stdout);
 }
 

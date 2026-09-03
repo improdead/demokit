@@ -28,6 +28,10 @@ import { promisify } from 'node:util';
 import { existsSync, mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+// The Python renderer, as resolved by bin/demokit (a venv when the system
+// interpreter lacks Pillow/numpy).
+const PY = process.env.DEMOKIT_PY || 'python3';
+
 const run = promisify(execFile);
 const IMAGE = process.env.SCREENBOX_IMAGE || 'screenbox:mate';
 const DISPLAY = ':99';
@@ -133,7 +137,7 @@ export async function capture({ shotDir, flowPath, size = '4288x2560', fps = 30,
     // Chromium ignores --remote-debugging-address and binds CDP to loopback
     // only, so a published port reaches nothing. python3 is already in the
     // image; a nine-line TCP relay is cheaper than adding socat to it.
-    await run(bin, ['exec', '-d', name, 'python3', '-c',
+    await run(bin, ['exec', '-d', name, PY, '-c',
       `import socket,threading
 def pipe(a,b):
     try:

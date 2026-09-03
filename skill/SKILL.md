@@ -15,9 +15,10 @@ Works on three sources, all through the same pipeline:
 | a CLI or a script | `demokit term "<shell command>" out.mp4` (drawn window) or `demokit termreal spec.json out.mp4` (your real Terminal, filmed) |
 | a native app or the desktop | `demokit screen out.mp4 --seconds 30` |
 
-Install: `npm install -g @dekai/demokit` and `pip3 install pillow numpy`. The first recording
-downloads a headless Chromium once. Everything else — a static ffmpeg included — comes with the
-package.
+Install: `npm install -g @dekai/demokit`, or nothing at all — `npx @dekai/demokit` works. The
+first run provisions a headless Chromium and, only if the system Python lacks Pillow/numpy, a
+cached venv for the renderer; both are one-time and it says so while it does them. A static
+ffmpeg comes with the package.
 
 For anything behind a login, `box` needs the session carried in — it starts with
 an empty profile. Export the cookies from a browser that is already signed in and
