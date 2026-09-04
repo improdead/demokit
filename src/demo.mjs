@@ -337,13 +337,16 @@ if (!process.argv.includes('--no-verify')) {
         for (const f of st.strips) console.log(`     look: ${f}`);
       }
       if (v.outcome !== 'verified') {
+        process.exitCode = 2;
         console.log('  A step that changes nothing is a beat the demo should not have. '
           + 'Fix the flow, not the framing.');
       }
     } else if (v.why && !['term', 'screen'].includes(man0.source)) {
       console.log(`\nfeature check: ${v.outcome} - ${v.why}`);
+      process.exitCode = 2;
     }
   } catch (e) {
+    process.exitCode = 2;
     console.log('\nfeature check: could not run - ' + String(e.message || e).slice(0, 140));
   }
 }

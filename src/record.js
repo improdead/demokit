@@ -17,9 +17,9 @@
  */
 const fs = require('node:fs');
 
-// playwriter's sandbox does NOT inherit the shell environment (process.env is
-// empty), so parameters arrive through a file instead. bin/demokit writes it.
-const ARGS = (() => {
+// The bridge injects structured arguments without relying on sandbox environment
+// variables. The args file remains a compatibility fallback for older callers.
+const ARGS = typeof DEMOKIT_ARGS !== "undefined" ? DEMOKIT_ARGS : (() => {
   try { return JSON.parse(fs.readFileSync('.cache/args.json', 'utf8')); } catch (e) { return {}; }
 })();
 const OUT = ARGS.out || '.cache/shot';
@@ -72,7 +72,7 @@ if (seed.localStorage || seed.sessionStorage) {
 // flow - a human should be able to read exactly what was made up.
 for (const r of seed.routes || []) {
   const bodyFor = () => {
-    if (r.file) return fs.readFileSync(r.file, 'utf8');
+    if (r.file) return fs.readFileSync(require('node:path').resolve(require('node:path').dirname(FLOW_PATH), r.file), 'utf8');
     if (typeof r.body === 'string') return r.body;
     return JSON.stringify(r.json ?? r.body ?? {});
   };

@@ -3,7 +3,7 @@
 #
 #   bin/demokit login <url>                              # sign in once; recordings reuse it
 #   bin/demokit local flows/x.json out.mp4               # DEFAULT: headless Chromium, no Docker
-#   bin/demokit probe <url>                              # look before you plan (needs playwriter)
+#   bin/demokit probe <url>                              # inspect with local Chromium
 #   bin/demokit box flows/x.json out.mp4                 # real cursor, in a container
 #   bin/demokit term "pytest -q" out.mp4                 # a terminal, drawn offscreen
 #   bin/demokit termreal spec.json out.mp4               # a REAL recording of Terminal.app
@@ -17,27 +17,31 @@
 #   bin/demokit critic <shotDir> out.mp4                 # frames to WATCH + invariants
 #   bin/demokit --session <id> <flow.json> <out.mp4>     # record via real Chrome (auth)
 #   bin/demokit flows/example.json out.mp4 [--level 1.35 --inset 0.84 ...]
-#   bin/demokit --render-only .cache/shot-example out.mp4   # re-render, no recapture
+#   bin/demokit --render-only .demokit/shot-example out.mp4   # re-render, no recapture
 #
-# Must run from the demokit directory: playwriter's sandbox scopes file writes
-# to the session's cwd, so a session created elsewhere cannot write frames here.
+# Paths supplied by the user resolve from their calling directory.
 set -euo pipefail
 # Under `npm install -g` this script is a symlink in the global bin dir, so
 # dirname "$0" is the wrong place. Resolve the link, keep the caller's cwd for
 # THEIR paths, and keep work files in their directory rather than inside the
 # package.
 CALLER_PWD="$PWD"
-SELF="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+command -v node >/dev/null || { echo "demokit: Node.js 20+ is required" >&2; exit 1; }
+SELF="$(node -e 'console.log(require("fs").realpathSync(process.argv[1]))' "$0")"
 cd "$(dirname "$SELF")/.."
 abs() { case "$1" in /*) printf '%s\n' "$1";; *) printf '%s\n' "$CALLER_PWD/$1";; esac; }
-export DEMOKIT_WORK="${DEMOKIT_WORK:-$CALLER_PWD/.demokit}"
+export DEMOKIT_CALLER="$CALLER_PWD"
+case "${1:---help}" in --help|-h|help|--version|-v|init|skill) cd "$CALLER_PWD"; exec node "$(dirname "$SELF")/../src/setup.mjs" "$@";; esac
+export DEMOKIT_WORK="$(abs "${DEMOKIT_WORK:-$CALLER_PWD/.demokit}")"
 [ -n "${DEMOKIT_COOKIES:-}" ] && export DEMOKIT_COOKIES="$(abs "$DEMOKIT_COOKIES")"
+[ -n "${DEMOKIT_AUTH:-}" ] && export DEMOKIT_AUTH="$(abs "$DEMOKIT_AUTH")"
 mkdir -p "$DEMOKIT_WORK"
+# Generated captures must stay untracked even in a new user repository.
+[ -e "$DEMOKIT_WORK/.gitignore" ] || printf '*\n' > "$DEMOKIT_WORK/.gitignore"
 export PATH="$HOME/.local/bin:$PATH"
 
 die() { echo "demokit: $*" >&2; exit 1; }
 
-command -v node >/dev/null || die "node not found (https://nodejs.org, 18+)"
 ROOT="$(pwd)"
 # ffmpeg: the package ships a static build; a system one is used if present.
 # Resolve dependencies the way Node does, from the package root. When npm
@@ -54,7 +58,7 @@ if [ -z "${DEMOKIT_PW:-}" ]; then
   PWC="$(resolve_dep playwright-core/package.json)"; [ -n "$PWC" ] && export DEMOKIT_PW="$(dirname "$PWC")"
   [ -z "${DEMOKIT_PW:-}" ] && [ -d "$ROOT/.tools/node_modules/playwright-core" ] && export DEMOKIT_PW="$ROOT/.tools/node_modules/playwright-core"
 fi
-command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || die "ffmpeg/ffprobe not found. Run: npm install   (in the demokit directory)"
+command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || die "ffmpeg/ffprobe not found. Install a system ffmpeg/ffprobe or allow ffmpeg-static install scripts and reinstall @dekai/demokit"
 # The renderer is Python (Pillow + numpy). Provision it rather than instructing.
 #
 # Telling someone to run a second command is a second chance to bounce off. A
@@ -86,7 +90,7 @@ else
     die "could not set up the Python renderer. Install the two packages yourself and re-run: python3 -m pip install pillow numpy"
   fi
 fi
-# playwriter is only needed for `probe` and the --session path (recording through the user's own Chrome).
+# Playwriter is only needed for the explicit --session path.
 need_playwriter() { command -v playwriter >/dev/null || die "this path records through your own Chrome and needs playwriter (npm i -g playwriter). The default path does not - run: bin/demokit local <flow.json> <out.mp4>"; }
 
 # record.js/probe.js use top-level await and run inside playwriter's sandbox, so
@@ -98,48 +102,25 @@ for (const f of ["src/record.js","src/probe.js"]) {
   catch (e) { console.error("demokit: syntax error in "+f+": "+e.message); process.exit(1); }
 }' || exit 1
 
-# playwriter's sandbox does not inherit the environment, so parameters go in a file.
-write_args() { mkdir -p .cache; node -e '
-  const fs=require("fs");
-  fs.writeFileSync(".cache/args.json", JSON.stringify(Object.fromEntries(
-    process.argv.slice(1).map(a=>a.split("=")).filter(p=>p.length===2))));
-' -- "$@"; }
-
-# Anything behind a login has to be recorded through the user's own Chrome:
-#   playwriter session new          (they click the extension on an authed tab)
-#   bin/demokit --session <id> flows/x.json out.mp4
-# Without this the CLI always made a fresh headless session, which is logged out.
 SESSION_OVERRIDE=""
 if [ "${1:-}" = "--session" ]; then shift; SESSION_OVERRIDE="${1:?--session needs an id}"; shift; fi
 
-ensure_session() {
-  if [ -n "$SESSION_OVERRIDE" ]; then
-    SESSION="$SESSION_OVERRIDE"
-    playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION" \
-      || die "no such playwriter session: $SESSION (run: playwriter session list)"
-    local cwd
-    cwd="$(playwriter session list 2>/dev/null | awk -v s="$SESSION" '$1==s {print $(NF-1)}')"
-    [ "$cwd" = "$PWD" ] || echo "demokit: WARNING session $SESSION is rooted at $cwd, not $PWD - frames will land there" >&2
-    echo "demokit: using session $SESSION"
-    return
-  fi
-  SESSION="$(cat .cache/session 2>/dev/null || true)"
-  if [ -z "$SESSION" ] || ! playwriter session list 2>/dev/null | awk '{print $1}' | grep -qx "$SESSION"; then
-    SESSION="$(playwriter session new --browser headless 2>&1 | grep -oE 'Session [0-9]+' | grep -oE '[0-9]+')"
-    [ -n "$SESSION" ] || die "could not create a playwriter session"
-    mkdir -p .cache; echo "$SESSION" > .cache/session
-    echo "demokit: new headless session $SESSION"
-  else
-    echo "demokit: reusing session $SESSION"
+ensure_browser() {
+  # Probe an actual launch: the headless-shell path differs from executablePath().
+  if ! node -e 'const {chromium}=require(process.argv[1]); chromium.launch({headless:true}).then(b=>b.close()).catch(()=>process.exit(1))' "$DEMOKIT_PW" 2>/dev/null; then
+    echo "demokit: installing Chromium headless shell (first run may download ~200 MB)..."
+    node "$DEMOKIT_PW/cli.js" install chromium-headless-shell || die "Chromium setup failed; on Linux also install Playwright system dependencies (see README)."
   fi
 }
 
 if [ "${1:-}" = "probe" ]; then
   shift; URL="${1:?usage: demokit probe <url>}"
-  ensure_session
-  write_args "url=$URL"
-  need_playwriter
-  exec playwriter -s "$SESSION" --timeout 180000 -f src/probe.js
+  if [ -n "$SESSION_OVERRIDE" ]; then
+    need_playwriter
+    exec node src/playwriter-run.mjs "$SESSION_OVERRIDE" probe "$URL" "$DEMOKIT_WORK/probe.json"
+  fi
+  ensure_browser
+  exec node src/probe-local.mjs "$URL" "$DEMOKIT_WORK/probe.json"
 fi
 
 # Offscreen terminal recording: runs the command in a pty and paints frames
@@ -236,6 +217,7 @@ fi
 
 if [ "${1:-}" = "verify" ]; then
   shift; SHOT="$(abs "${1:?usage: demokit verify <shotDir> [out.mp4]}")"; shift
+  if [ $# -gt 0 ] && [[ "$1" != --* ]]; then OUT="$(abs "$1")"; shift; exec node src/verify.mjs "$SHOT" "$OUT" "$@"; fi
   exec node src/verify.mjs "$SHOT" "$@"
 fi
 
@@ -255,16 +237,12 @@ fi
 
 # The default: a headless Chromium demokit launches itself. No Docker, no
 # extension, no display. The engine draws the cursor and the window chrome.
-if [ "${1:-}" = "local" ]; then
-  shift; FLOW="$(abs "${1:?usage: demokit local <flow.json> <out.mp4> [render flags]}")"; shift
+if [ "${1:-}" = "local" ] || { [ -z "$SESSION_OVERRIDE" ] && [[ "${1:-}" != --* ]] && [ -f "$(abs "${1:-}")" ]; }; then
+  if [ "${1:-}" = "local" ]; then shift; fi
+  FLOW="$(abs "${1:?usage: demokit local <flow.json> <out.mp4> [render flags]}")"; shift
   OUT="$(abs "${1:?usage: demokit local <flow.json> <out.mp4>}")"; shift
   SHOT="$DEMOKIT_WORK/shot-$(basename "$FLOW" .json)"
-  # First run only: fetch the headless Chromium that matches the bundled playwright-core.
-  if [ -n "${DEMOKIT_PW:-}" ] && ! node -e "
-    const {chromium}=require(process.argv[1]); const p=chromium.executablePath(); require('fs').accessSync(p);" "$DEMOKIT_PW" 2>/dev/null; then
-    echo "demokit: downloading Chromium (first run only, ~100MB)..."
-    node "$DEMOKIT_PW/cli.js" install chromium-headless-shell || die "could not download Chromium"
-  fi
+  ensure_browser
   node src/localcap.mjs "$FLOW" "$SHOT" || exit $?
   HOST="$("$DEMOKIT_PY" -c 'import json,sys;from urllib.parse import urlparse;u=urlparse(json.load(open(sys.argv[1]))["url"]);print(u.netloc+u.path)' "$FLOW" 2>/dev/null || echo localhost)"
   TITLE="$("$DEMOKIT_PY" -c 'import json,sys;f=json.load(open(sys.argv[1]));print(f.get("title") or f.get("_title") or "")' "$FLOW" 2>/dev/null)"
@@ -305,29 +283,17 @@ if [ "${1:-}" = "review" ]; then
 fi
 
 if [ "${1:-}" = "--render-only" ]; then
-  shift; SHOT="${1:?usage: --render-only <shotDir> <out.mp4>}"; shift
-  OUT="${1:?usage: --render-only <shotDir> <out.mp4>}"; shift
+  shift; SHOT="$(abs "${1:?usage: --render-only <shotDir> <out.mp4>}")"; shift
+  OUT="$(abs "${1:?usage: --render-only <shotDir> <out.mp4>}")"; shift
   exec node src/demo.mjs "$SHOT" "$OUT" "$@"
 fi
 
-FLOW="${1:-}"; OUT="${2:-}"; shift 2 || true
-[ -n "$FLOW" ] && [ -n "$OUT" ] || die "usage: demokit <flow.json> <out.mp4> [render flags]"
+[ -n "$SESSION_OVERRIDE" ] || die "unknown command; run demokit --help"
+FLOW="$(abs "${1:?flow JSON required}")"; OUT="$(abs "${2:?output MP4 required}")"; shift 2
 [ -f "$FLOW" ] || die "no such flow: $FLOW"
-node -e "JSON.parse(require('fs').readFileSync('$FLOW'))" 2>/dev/null || die "$FLOW is not valid JSON"
-
-ensure_session
-# One shot dir per flow: a shared .cache/shot means capturing a second flow
-# destroys the first one's frames, and --render-only silently re-renders the
-# wrong take.
-SHOT="$DEMOKIT_WORK/shot-$(basename "$FLOW" .json)"
-write_args "flow=$FLOW" "out=$SHOT"
-
-echo "demokit: capturing $FLOW"
+node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$FLOW"
 need_playwriter
-playwriter -s "$SESSION" --timeout 300000 -f src/record.js
-
-[ -f "$SHOT/manifest.json" ] || die "capture produced nothing (preflight may have failed above)"
-
-echo "demokit: rendering"
-node src/demo.mjs "$SHOT" "$OUT" "$@"
-echo "demokit: re-render without recapturing -> bin/demokit --render-only $SHOT $OUT --level 1.5"
+SHOT="$DEMOKIT_WORK/shot-$(basename "$FLOW" .json)"
+node src/playwriter-run.mjs "$SESSION_OVERRIDE" record "$FLOW" "$SHOT"
+[ -f "$SHOT/manifest.json" ] || die "capture produced no manifest"
+exec node src/demo.mjs "$SHOT" "$OUT" "$@"

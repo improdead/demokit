@@ -7,7 +7,7 @@
   "seed": {
     "clock": "2026-08-26T15:41:00Z",
     "routes": [
-      { "url": "**/api/findings*", "file": "fixtures/findings.json", "delayMs": 380 }
+      { "url": "**/api/findings*", "file": "../fixtures/findings.json", "delayMs": 380 }
     ]
   },
   "hide": ["#intercom"],
