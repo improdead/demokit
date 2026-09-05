@@ -1,7 +1,7 @@
 {
   "name": "@dekai/demokit",
-  "version": "0.3.0",
-  "description": "Agent-native demo videos in one command: plan from the codebase, record a deterministic flow in headless Chromium, render it the way Cap does (spring zoom on clicks, real cursor shapes, wallpaper, squircle, shadow), fast-forward dead air, and verify the feature actually worked. No Docker.",
+  "version": "0.3.1",
+  "description": "Record repeatable local product demos with cursor effects, zoom, pacing, and feature-verification evidence. CLI plus agent skill.",
   "bin": {
     "demokit": "bin/demokit"
   },
@@ -9,13 +9,17 @@
     "bin/demokit",
     "src/",
     "skill/",
-    "flows/example.json",
+    "examples/quickstart/",
+    "examples/findings-app/",
+    "fixtures/",
     "flows/seeded-example.json",
+    "docs/",
+    "CONTRIBUTING.md",
     "README.md",
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "os": [
     "darwin",
@@ -27,7 +31,8 @@
     "ffprobe-static": "^3.1.0"
   },
   "scripts": {
-    "postinstall": "node -e \"console.log('demokit ready. Run: demokit local <flow.json> <out.mp4>')\""
+    "test": "node --test tests/*.test.mjs",
+    "test:smoke": "node tests/smoke.mjs"
   },
   "keywords": [
     "demo",
@@ -44,5 +49,9 @@
     "type": "git",
     "url": "git+https://github.com/improdead/demokit.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://github.com/improdead/demokit#readme",
+  "bugs": {
+    "url": "https://github.com/improdead/demokit/issues"
+  }
 }

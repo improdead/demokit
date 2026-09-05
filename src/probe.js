@@ -9,8 +9,8 @@
  */
 const fs = require('node:fs');
 
-// The sandbox has no environment; parameters come from .cache/args.json.
-const ARGS = (() => {
+// The bridge injects structured arguments; retain the old file as a compatibility fallback.
+const ARGS = typeof DEMOKIT_ARGS !== "undefined" ? DEMOKIT_ARGS : (() => {
   try { return JSON.parse(fs.readFileSync('.cache/args.json', 'utf8')); } catch (e) { return {}; }
 })();
 const URL_ = ARGS.url;

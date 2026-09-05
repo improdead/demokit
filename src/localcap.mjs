@@ -63,6 +63,10 @@ if (!flowPath || !shotDir) {
 }
 const argOf = (n, d) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : d; };
 const flow = JSON.parse(readFileSync(flowPath, 'utf8'));
+const supportedSteps = new Set(['wait','key','scrollTo','hover','move','click','type','pulse']);
+if (!Array.isArray(flow.steps) || flow.steps.some(s => !supportedSteps.has(s.do))) {
+  console.error('localcap: unsupported step; local supports wait, key, scrollTo, hover, move, click, type, pulse'); process.exit(2);
+}
 // The screencast captures CSS pixels, so resolution comes from html{zoom}. A flow
 // written for the container path says zoom 1 because the container had a 2x
 // display; here that would record 1440x810 and upscale it to 4K. Never below 2.
@@ -135,7 +139,7 @@ if (seed.localStorage || seed.sessionStorage) {
   })()`);
 }
 for (const r of seed.routes || []) {
-  const body = r.file ? readFileSync(r.file, 'utf8') : (typeof r.body === 'string' ? r.body : JSON.stringify(r.json ?? r.body ?? {}));
+  const body = r.file ? readFileSync(resolve(dirname(flowPath), r.file), 'utf8') : (typeof r.body === 'string' ? r.body : JSON.stringify(r.json ?? r.body ?? {}));
   await page.route(r.url, async (route) => {
     if (r.delayMs) await new Promise((res) => setTimeout(res, r.delayMs));
     await route.fulfill({ status: r.status || 200, contentType: r.contentType || 'application/json', body });
@@ -357,7 +361,7 @@ async function runStep(s, label) {
 
 for (const s of flow.steps) {
   const label = s.label || `${s.do} ${s.sel || ''}`.trim();
-  try { await runStep(s, label); } catch (e) { console.log(`step failed (${label}): ${String(e.message || e).slice(0, 120)}`); }
+  try { await runStep(s, label); } catch (e) { console.log(`step failed (${label}): ${String(e.message || e).slice(0, 120)}`); proof.push({label,kind:s.do,tMs:now(),afterMs:now(),checks:[{check:'the step ran',ok:false,detail:String(e.message||e)}]}); }
 }
 await dwell(flow.tailMs ?? 1800);
 const endMs = Math.max(0, now() - (firstAt || 0));
@@ -380,7 +384,9 @@ writeFileSync(join(shotDir, 'manifest.json'), JSON.stringify({
   pointer: shift(path), path: [],            // the engine draws Cap's cursor from `pointer`
   proof: shiftProof(proof),
 }, null, 1));
-const bad = proof.flatMap((p) => p.checks.filter((c) => c.ok === false)).length;
+const bad = proof.filter(p => p.expect?.ok === false || p.checks.some(c => c.ok === false)).length;
 console.log(`localcap: ${frames.length} frames @ ${realW}x${realH}, ${evs.length} event(s), ${path.length} pointer samples, ${(endMs / 1000).toFixed(1)}s -> ${shotDir}`);
 console.log(bad ? `localcap: ${bad} PROOF FAILURE(S) - the video will show a feature that did not work` : 'localcap: every step changed the page it claimed to change');
 await browser.close();
+
+if (bad || !frames.length) process.exitCode = 2;

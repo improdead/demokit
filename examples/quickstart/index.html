@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  /><title>DemoKit example — Task board</title>
+  <style>
+    body {
+      font: 20px system-ui;
+      background: #eef2ff;
+      color: #172554;
+      margin: 0;
+      padding: 7vh 10vw;
+    }
+    main {
+      background: white;
+      padding: 48px;
+      border: 1px solid #c7d2fe;
+      border-radius: 24px;
+      max-width: 780px;
+    }
+    h1 {
+      font-size: 42px;
+      margin: 8px 0;
+    }
+    p {
+      line-height: 1.6;
+      color: #475569;
+    }
+    button {
+      font: inherit;
+      background: #4338ca;
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 14px 24px;
+      cursor: pointer;
+    }
+    li {
+      margin-top: 24px;
+      padding: 24px;
+      background: #e0e7ff;
+      border-radius: 12px;
+      list-style: none;
+    }
+    ul {
+      padding: 0;
+    }
+    small {
+      color: #64748b;
+    }
+  </style>
+  <main>
+    <small>DEMO KIT · LOCAL EXAMPLE</small>
+    <h1>Task board</h1>
+    <p>
+      This bundled example runs locally. Create a task to see the board update.
+    </p>
+    <button id="create">Create task</button>
+    <ul id="tasks" aria-live="polite"></ul>
+  </main>
+  <script>
+    document.querySelector("#create").addEventListener("click", () => {
+      const item = document.createElement("li");
+      item.textContent = "Review the demo";
+      document.querySelector("#tasks").append(item);
+    });
+  </script>
+</html>
