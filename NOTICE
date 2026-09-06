@@ -1,0 +1,56 @@
+DemoKit — third-party attribution
+=================================
+
+Cap (https://github.com/CapSoftware/Cap)
+Copyright (c) 2023-present Cap Software, Inc.
+Licensed AGPLv3, except the `cap-camera*` and `scap-*` crate families (MIT).
+
+DemoKit's renderer is a derivative work of Cap's AGPLv3 code. It is not
+inspired by it; it is a deliberate port, documented as such in the source.
+Specifically:
+
+  src/caprender.py
+    - `_solve_1d` / `Spring`      <- crates/rendering/src/spring_mass_damper.rs
+                                     (analytic under/critical/over-damped solve,
+                                     rest thresholds)
+    - `zoom_segments`             <- apps/desktop/src-tauri/src/recording.rs
+                                     (`generate_zoom_segments_from_clicks_impl`,
+                                     including CLICK_PRE_PADDING_MS 300,
+                                     CLICK_POST_PADDING_MS 2500, MERGE_GAP_MS 2500,
+                                     TRAILING_CLICK_IGNORE_MS 1000,
+                                     CLICK_END_CLAMP_PADDING_MS 800, amount 2.0)
+    - `build_clusters`,
+      `cluster_center_at`,
+      `snap_to_edges`,
+      `follow_center`,
+      `bounds_from`,
+      `zoom_timeline`             <- crates/rendering/src/zoom_spring.rs and
+                                     crates/rendering/src/zoom.rs
+                                     (cluster ratios 0.5/0.7, STEP_MS 8,
+                                     CENTER_PREAIM_MAX_AMOUNT, edge snap,
+                                     `from_amount_center` travel space)
+    - `filter_shake`, `decimate`,
+      `pos_at`, `cursor_timeline`,
+      `click_t`                   <- crates/rendering/src/cursor_interpolation.rs
+                                     (shake filter, 60fps decimation, spring lag
+                                     fed forward, click look-ahead 500ms, the
+                                     stiffer 175ms pre-click profile, idle hold)
+    - cursor sizing, click shrink <- crates/rendering/src/layers/cursor.rs
+                                     (STANDARD_CURSOR_HEIGHT 60,
+                                      CLICK_SHRINK_SIZE 0.8, 130ms smoothstep,
+                                      velocity tilt 0.03 deg/px clamped to 20)
+    - shadow, squircle corners    <- crates/rendering/src/shaders/
+                                     composite-video-frame.wgsl
+                                     (superellipse power 4, smoothstep shadow
+                                      falloff over the rounded-rect SDF)
+
+  src/edit.mjs
+    - `capZoom`, `buildClusters`  <- the same segment generator and cluster logic
+
+No Cap source file is redistributed here, and no Cap trademark is used. The
+cursor images and wallpaper Cap ships are NOT included: DemoKit draws its
+cursors as vectors and reads a wallpaper from the host system at run time.
+
+If you are Cap Software and would like anything about this attribution or
+licensing changed, please open an issue on
+https://github.com/improdead/demokit.

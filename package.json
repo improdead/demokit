@@ -16,7 +16,8 @@
     "docs/",
     "CONTRIBUTING.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=20"
@@ -49,7 +50,7 @@
     "type": "git",
     "url": "git+https://github.com/improdead/demokit.git"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "homepage": "https://github.com/improdead/demokit#readme",
   "bugs": {
     "url": "https://github.com/improdead/demokit/issues"
