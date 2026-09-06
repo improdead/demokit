@@ -1,6 +1,6 @@
 {
   "name": "@dekai/demokit",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Record repeatable local product demos with cursor effects, zoom, pacing, and feature-verification evidence. CLI plus agent skill.",
   "bin": {
     "demokit": "bin/demokit"
