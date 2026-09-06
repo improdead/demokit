@@ -1,0 +1,62 @@
+{
+  "claim": "Someone watching will believe DemoKit works on any site, not just the one it was written against — it types into a real search box on a site nobody involved controls, and the article it lands on is the one it said it would.",
+  "_ledger": [
+    "S0  Wikipedia's front page                          <- where the viewer starts",
+    "S1  suggestions under the search box, as you type   <- type \"Damping\"",
+    "S2  the Damping article, spring-mass and all        <- click the first suggestion"
+  ],
+  "url": "https://en.wikipedia.org/wiki/Main_Page",
+  "probe": ".cdx-menu-item, #bodyContent p, .vector-menu-content li",
+  "publicPage": true,
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 2600,
+  "tailMs": 2600,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 1400
+    },
+    {
+      "do": "type",
+      "sel": "#searchInput",
+      "text": "Damping",
+      "delay": 145,
+      "label": "search for the thing the camera is built on",
+      "shows": "live suggestions under the search box",
+      "ms": 1600,
+      "findMs": 12000,
+      "prove": {
+        "textAppears": [
+          "oscillating physical system"
+        ]
+      },
+      "expect": {
+        "sel": ".cdx-menu-item",
+        "timeout": 10000
+      }
+    },
+    {
+      "do": "click",
+      "sel": ".cdx-menu-item",
+      "label": "open the article",
+      "shows": "a mass on a spring, underdamped, critically damped, overdamped",
+      "ms": 4200,
+      "findMs": 12000,
+      "prove": {
+        "textAppears": [
+          "critically damped"
+        ]
+      },
+      "expect": {
+        "sel": "text=damping ratio",
+        "timeout": 12000
+      },
+      "later": true
+    }
+  ]
+}

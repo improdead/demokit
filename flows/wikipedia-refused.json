@@ -1,0 +1,67 @@
+{
+  "claim": "The same flow as wikipedia-search, with one more beat that films a control which does nothing. Nobody should believe anything from this take, and DemoKit should not write a file.",
+  "_ledger": [
+    "S1  suggestions under the search box            <- type \"Damping\"  (provable)",
+    "S2  the Damping article                         <- click the first suggestion  (provable)",
+    "S3  nothing: Read is the tab we are already on  <- click Read  (not provable, on purpose)"
+  ],
+  "url": "https://en.wikipedia.org/wiki/Main_Page",
+  "probe": ".cdx-menu-item, #bodyContent p",
+  "publicPage": true,
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "settleMs": 2600,
+  "tailMs": 2200,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 1400
+    },
+    {
+      "do": "type",
+      "sel": "#searchInput",
+      "text": "Damping",
+      "delay": 145,
+      "label": "search for the thing the camera is built on",
+      "shows": "live suggestions under the search box",
+      "ms": 1600,
+      "findMs": 12000,
+      "prove": {
+        "textAppears": [
+          "oscillating physical system"
+        ]
+      }
+    },
+    {
+      "do": "click",
+      "sel": ".cdx-menu-item",
+      "label": "open the article",
+      "shows": "a mass on a spring, underdamped, critically damped, overdamped",
+      "ms": 3200,
+      "findMs": 12000,
+      "prove": {
+        "textAppears": [
+          "critically damped"
+        ]
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "#ca-view a",
+      "label": "switch to the reading view",
+      "shows": "the article body, laid out for reading",
+      "ms": 2600,
+      "findMs": 12000,
+      "prove": {
+        "textAppears": [
+          "From Wikipedia, the free encyclopedia"
+        ]
+      },
+      "later": true
+    }
+  ]
+}

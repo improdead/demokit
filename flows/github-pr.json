@@ -1,0 +1,59 @@
+{
+  "claim": "Someone who has never run DemoKit will believe it drives a real, unmodified, third-party web app — no fixtures, no test hooks, no cooperation from the site — and can show what each click actually changed.",
+  "_ledger": [
+    "S0  a merged pull request on vercel/next.js, conversation tab   <- where the viewer starts",
+    "S1  the commits that went into it, dated and signed             <- click Commits",
+    "S2  the diff: 16 files, +177 -14, line by line                  <- click Files changed"
+  ],
+  "url": "https://github.com/vercel/next.js/pull/86000",
+  "probe": "a[role=\"tab\"], .tabnav-tab, .diff-table",
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 6000,
+  "tailMs": 2600,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 1800
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Commits\")",
+      "label": "open the commits",
+      "shows": "every commit that went into this pull request",
+      "ms": 3000,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Commits on"
+        ]
+      },
+      "expect": {
+        "sel": "text=Commits on",
+        "timeout": 12000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Files changed\")",
+      "label": "open the diff",
+      "shows": "the sixteen files it touched, line by line",
+      "ms": 4600,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Changes from"
+        ]
+      },
+      "expect": {
+        "sel": "text=Changes from",
+        "timeout": 15000
+      },
+      "later": true
+    }
+  ]
+}

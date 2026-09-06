@@ -156,9 +156,22 @@ if (flow.clearStorage === true) {
 }
 
 // Do not start on a sign-in page.
-const authed = await page.evaluate(() => !/sign in|welcome back|log in|continue with/i.test(document.body.innerText.slice(0, 600))).catch(() => true);
+//
+// The test is "is this a sign-in screen", not "does this page offer a sign-in".
+// Nearly every public site has Sign in / Sign up in its header, and matching on
+// the first 600 characters of body text failed all of them - GitHub, npm, Stack
+// Overflow - before a single frame was recorded. A sign-in screen is a page whose
+// content IS the form: a visible password box, or almost no other text.
+const authed = flow.publicPage === true || await page.evaluate(() => {
+  const visible = (el) => el.offsetParent !== null || el.getClientRects().length > 0;
+  if ([...document.querySelectorAll('input[type="password"]')].some(visible)) return false;
+  const text = (document.body.innerText || '').trim();
+  if (text.length > 1500) return true;   // there is a whole page here, not a form
+  return !/sign in|welcome back|log in|continue with/i.test(text.slice(0, 600));
+}).catch(() => true);
 if (!authed) {
   console.log(`PREFLIGHT FAILED: the page is a sign-in screen. Run once:  demokit login ${flow.url}`);
+  console.log('  (If this page is public and simply offers a sign-in, set "publicPage": true in the flow.)');
   await browser.close(); process.exit(3);
 }
 
