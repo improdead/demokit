@@ -1,0 +1,170 @@
+{
+  "claim": "Someone who has only seen ten-second clips will believe DemoKit can carry a whole task \u2014 a reviewer moving through a pull request, back out to the queue, into another one, and down to the diff \u2014 without a cut, and prove every screen it claimed to reach along the way.",
+  "_ledger": [
+    "S0  a merged pull request on vercel/next.js, conversation tab  <- where the viewer starts",
+    "S1  the commits that went into it                              <- click Commits",
+    "S2  its diff, sixteen files                                    <- click Files changed",
+    "S3  back to the discussion, reviewers and labels                <- click Conversation",
+    "S4  the issue tracker, 999 of them                              <- click Issues",
+    "S5  the pull request queue, 2.3k of them                        <- click Pull requests",
+    "S6  whatever is at the top of the queue right now               <- click the first row",
+    "S7  its commits                                                 <- click Commits",
+    "S8  its diff, line by line                                      <- click Files changed"
+  ],
+  "url": "https://github.com/vercel/next.js/pull/86000",
+  "probe": "a[role=\"tab\"], .tabnav-tab, .diff-table, a[data-hovercard-type=\"pull_request\"]",
+  "publicPage": true,
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 6000,
+  "tailMs": 2800,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 2000
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Commits\")",
+      "label": "open the commits",
+      "shows": "every commit that went into this pull request",
+      "ms": 4500,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Commits on"
+        ]
+      },
+      "expect": {
+        "sel": "text=Commits on",
+        "timeout": 20000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Files changed\")",
+      "label": "open its diff",
+      "shows": "the sixteen files it touched",
+      "ms": 5000,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Changes from"
+        ]
+      },
+      "expect": {
+        "sel": "text=Changes from",
+        "timeout": 20000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Conversation\")",
+      "label": "back to the discussion",
+      "shows": "the review thread, its reviewers and its labels",
+      "ms": 4500,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Reviewers"
+        ]
+      },
+      "expect": {
+        "sel": "text=Reviewers",
+        "timeout": 20000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "#issues-tab",
+      "label": "over to the issue tracker",
+      "shows": "everything open against the repository",
+      "ms": 4500,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Milestones"
+        ]
+      },
+      "expect": {
+        "sel": "text=Milestones",
+        "timeout": 20000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "#pull-requests-tab",
+      "label": "out to the review queue",
+      "shows": "every open pull request, newest first",
+      "ms": 4800,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Reviews"
+        ]
+      },
+      "expect": {
+        "sel": "text=Reviews",
+        "timeout": 20000
+      }
+    },
+    {
+      "do": "click",
+      "sel": "a[data-hovercard-type=\"pull_request\"]",
+      "label": "open whatever is at the top today",
+      "shows": "a pull request nobody chose in advance - this is a live queue",
+      "ms": 5000,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Reviewers"
+        ]
+      },
+      "expect": {
+        "sel": "text=Reviewers",
+        "timeout": 20000
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Commits\")",
+      "label": "its commits",
+      "shows": "what went into that one",
+      "ms": 4500,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Commits on"
+        ]
+      },
+      "expect": {
+        "sel": "text=Commits on",
+        "timeout": 20000
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "a:has-text(\"Files changed\")",
+      "label": "down to the diff",
+      "shows": "the change itself, line by line",
+      "ms": 6000,
+      "findMs": 15000,
+      "prove": {
+        "textAppears": [
+          "Changes from"
+        ]
+      },
+      "expect": {
+        "sel": "text=Changes from",
+        "timeout": 20000
+      },
+      "later": true
+    }
+  ]
+}
