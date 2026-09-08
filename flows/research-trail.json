@@ -1,0 +1,104 @@
+{
+  "claim": "An agent was asked to research who Ada Lovelace was and trace her work to the machine it was written for. Someone watching should believe DemoKit carried out that whole research trail on real Wikipedia - searched, opened the article, then followed the citations from Lovelace to Babbage to the Analytical Engine to the Difference Engine - and that every page it claimed to reach is the page it actually landed on.",
+  "_ledger": [
+    "S0  Wikipedia's front page                                   <- where the viewer starts",
+    "S1  suggestions for Ada Lovelace                             <- type the query",
+    "S2  the Ada Lovelace article                                 <- Enter",
+    "S3  Charles Babbage, her collaborator                        <- follow the link",
+    "S4  the Analytical Engine he designed                        <- follow the link",
+    "S5  the Difference Engine that came before it                <- follow the link"
+  ],
+  "url": "https://en.wikipedia.org/wiki/Main_Page",
+  "probe": "#searchInput, .cdx-menu-item, #mw-content-text p",
+  "publicPage": true,
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 2600,
+  "tailMs": 2800,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 1400
+    },
+    {
+      "do": "type",
+      "sel": "#searchInput",
+      "text": "Ada Lovelace",
+      "delay": 130,
+      "label": "search for the first programmer",
+      "shows": "live suggestions under the search box",
+      "ms": 1600,
+      "findMs": 12000,
+      "settleAfterMs": 1800,
+      "prove": {
+        "textAppears": [
+          "English mathematician"
+        ]
+      }
+    },
+    {
+      "do": "click",
+      "sel": ".cdx-menu-item",
+      "label": "open her article",
+      "shows": "the Ada Lovelace article",
+      "ms": 3400,
+      "findMs": 14000,
+      "prove": {
+        "textAppears": [
+          "Analytical Engine"
+        ],
+        "urlChanges": true
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "a[title=\"Charles Babbage\"]",
+      "label": "follow her collaborator",
+      "shows": "Charles Babbage, who she worked with",
+      "ms": 3600,
+      "findMs": 14000,
+      "prove": {
+        "textAppears": [
+          "English polymath"
+        ],
+        "urlChanges": true
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "a[title=\"Analytical engine\"]",
+      "label": "to the machine he designed",
+      "shows": "the Analytical Engine - the computer her program was written for",
+      "ms": 3600,
+      "findMs": 14000,
+      "prove": {
+        "textAppears": [
+          "mechanical general-purpose computer"
+        ],
+        "urlChanges": true
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "a[title=\"Difference engine\"]",
+      "label": "and the one that came before",
+      "shows": "the Difference Engine - where the whole line started",
+      "ms": 4000,
+      "findMs": 14000,
+      "prove": {
+        "textAppears": [
+          "automatic mechanical calculator"
+        ],
+        "urlChanges": true
+      },
+      "later": true
+    }
+  ]
+}

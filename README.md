@@ -141,6 +141,7 @@ verifies every step; nothing is a fixture.
 
 ```bash
 demokit local flows/github-review-long.json out/review.mp4   # 8 steps, ~42s: a whole PR review
+demokit local flows/research-trail.json      out/trail.mp4    # a goal-directed research task: Lovelace -> the Difference Engine
 demokit local flows/github-pr.json           out/pr.mp4       # a merged PR: commits, then the diff
 demokit local flows/wikipedia-search.json    out/wiki.mp4     # type a query, open the article
 demokit local flows/google-maps.json         out/maps.mp4     # a WebGL map: pins, then filters

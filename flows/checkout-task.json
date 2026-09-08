@@ -1,0 +1,72 @@
+{
+  "claim": "An agent was told to sign in and buy something. Someone watching should believe DemoKit carried out the whole purchase on a real store - logged in, put the item in the cart, filled the shipping form, and placed the order - and that it genuinely went through, because the last thing on screen is the store's own confirmation, not a checkmark DemoKit drew.",
+  "_ledger": [
+    "S0  the store's sign-in page                                <- where the viewer starts",
+    "S1  signed in to the full catalogue                         <- type creds + Login",
+    "S2  the backpack in the cart, badge at 1                    <- add to cart",
+    "S3  the cart, ready to check out                            <- open the cart",
+    "S4  the shipping form, filled                               <- checkout + fill",
+    "S5  the order summary: line items, tax, total               <- continue",
+    "S6  the store's own 'Thank you for your order'             <- finish"
+  ],
+  "url": "https://www.saucedemo.com/",
+  "probe": "#user-name, #password, #login-button",
+  "publicPage": true,
+  "layout": [1440, 810],
+  "zoom": 1,
+  "clearStorage": true,
+  "settleMs": 2000,
+  "tailMs": 2800,
+  "steps": [
+    { "do": "wait", "ms": 1400 },
+    { "do": "type", "sel": "#user-name", "text": "standard_user", "delay": 85, "label": "sign in", "ms": 600, "findMs": 12000, "prove": { "changes": false } },
+    { "do": "type", "sel": "#password", "text": "secret_sauce", "delay": 85, "label": "password", "ms": 500, "findMs": 12000, "prove": { "changes": false } },
+    {
+      "do": "click", "sel": "#login-button",
+      "label": "into the store", "shows": "the full catalogue, signed in",
+      "ms": 2600, "findMs": 12000,
+      "prove": { "textAppears": ["Sauce Labs Backpack"] },
+      "expect": { "sel": "text=Products", "timeout": 10000 }
+    },
+    {
+      "do": "click", "sel": "[data-test=\"add-to-cart-sauce-labs-backpack\"]",
+      "label": "add the backpack", "shows": "the button flip to Remove, the cart badge appear",
+      "ms": 2000, "findMs": 12000,
+      "prove": { "textAppears": ["Remove"] }, "later": true
+    },
+    {
+      "do": "click", "sel": ".shopping_cart_link",
+      "label": "open the cart", "shows": "the item in the cart, ready to check out",
+      "ms": 2600, "findMs": 12000,
+      "prove": { "urlChanges": true },
+      "expect": { "sel": "text=Your Cart", "timeout": 10000 }, "later": true
+    },
+    {
+      "do": "click", "sel": "[data-test=\"checkout\"]",
+      "label": "start checkout", "shows": "the shipping form",
+      "ms": 2200, "findMs": 12000,
+      "prove": { "textAppears": ["Checkout: Your Information"] },
+      "expect": { "sel": "[data-test=\"firstName\"]", "timeout": 10000 }, "later": true
+    },
+    {
+      "do": "type", "sel": "[data-test=\"firstName\"]", "text": "Dekai\tLi\t94105", "delay": 90,
+      "label": "fill the shipping form", "shows": "name and postcode entered across the form",
+      "ms": 1400, "findMs": 12000, "prove": { "changes": false }, "later": true
+    },
+    {
+      "do": "click", "sel": "[data-test=\"continue\"]",
+      "label": "review the order", "shows": "the summary - line items, tax and the total",
+      "ms": 3000, "findMs": 12000,
+      "prove": { "textAppears": ["Payment Information"] },
+      "expect": { "sel": "text=Payment Information", "timeout": 10000 }, "later": true
+    },
+    { "do": "scrollTo", "sel": "[data-test=\"finish\"]", "ms": 900, "findMs": 12000, "later": true },
+    {
+      "do": "click", "sel": "[data-test=\"finish\"]",
+      "label": "place the order", "shows": "the store's own confirmation - the order went through",
+      "ms": 4400, "findMs": 12000,
+      "prove": { "textAppears": ["Thank you for your order"] },
+      "expect": { "sel": "text=Thank you for your order", "timeout": 12000 }, "later": true
+    }
+  ]
+}
