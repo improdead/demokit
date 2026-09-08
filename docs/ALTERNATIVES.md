@@ -24,6 +24,39 @@ unsupported claims.
 
 The present advantage should be judged from reproducible output quality, clearer
 installation, understandable evidence, local-data handling and maintainable code.
-The package's current licensing issue also needs resolution before making a
-commercial/open-source positioning claim. No comparative performance or quality
-ranking was established by this audit.
+No comparative performance or quality ranking was established by this audit.
+(Licensing is resolved: DemoKit is AGPL-3.0-or-later as of 0.4.0 — see the README.)
+
+## Hands-on, cloned and run — 2026-09-07
+
+The tools above were read from documentation. These two were cloned and run against
+the same task (open a merged `vercel/next.js` PR, then its diff) on this machine.
+
+- **[WebReel](https://github.com/vercel-labs/webreel) — Apache-2.0.** `npm i webreel`,
+  a JSON config, `npx webreel record`. Ran clean in ~20s, auto-downloading its own
+  chrome-headless-shell and ffmpeg to `~/.webreel`. Output is h264 1080p60 at about
+  1 Mbit/s with a keystroke HUD, click sound effects and an animated cursor. No zoom,
+  and **no verification** — it films what the script says and trusts it. Targets by
+  visible `text` or CSS selector.
+- **[aidemo](https://github.com/tandryukha/aidemo) — MIT.** The closest peer, and the
+  most capable authoring tool of the set: an MCP server plus CLI, `inspect` (ranks
+  unique selectors on a live page), `lint` (forecasts scene freeze/overrun before a
+  take), narration, synced captions, auto-zoom, and `probe --golden` (a baseline diff).
+  It would not launch here — it hardcodes `chromium.launch({channel:"chrome"})` and so
+  needs Google Chrome installed, which this machine lacks. Its check is *drift*
+  (changed since the committed baseline), not *truth* (ever worked).
+
+**What DemoKit should learn from them:** aidemo's `inspect` and `lint` are better
+authoring aids than anything here, and WebReel's keystroke HUD is a nice touch. All
+are polish and authoring; none close the "did the feature actually work" gap, which
+remains DemoKit's one distinct axis.
+
+- **Playwright `recordVideo`.** WebM/VP8 only; the Chromium target bitrate `-b:v 1M`
+  is hardcoded and only `mode` and `size` are configurable
+  ([microsoft/playwright#31424](https://github.com/microsoft/playwright/issues/31424),
+  closed as a duplicate of #17217, `P3-collecting-feedback`); **no cursor is drawn in
+  the frame**. It asserts the test, never the video.
+- **Screen Studio / Loom** are human-driven recorders (Screen Studio: macOS-only,
+  auto-zoom + cursor smoothing; Loom: cross-platform, no auto-detected zoom).
+  **Skyvern / Browser Use** are LLM browser agents whose session replay is for
+  debugging, not presentation.

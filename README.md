@@ -133,6 +133,25 @@ recorder's CSS magnification can alter viewport-unit/fullscreen layouts, so insp
 capture geometry. Full-document navigation can drop presentation decorations.
 See [rendering notes](docs/rendering.md) for engine differences and units.
 
+## Example flows against public sites
+
+These ship in `flows/` and run with no login — the same recordings shown on the
+[write-up](https://dekai.me/demokit). Each one drives a real, third-party site and
+verifies every step; nothing is a fixture.
+
+```bash
+demokit local flows/github-review-long.json out/review.mp4   # 8 steps, ~42s: a whole PR review
+demokit local flows/github-pr.json           out/pr.mp4       # a merged PR: commits, then the diff
+demokit local flows/wikipedia-search.json    out/wiki.mp4     # type a query, open the article
+demokit local flows/google-maps.json         out/maps.mp4     # a WebGL map: pins, then filters
+demokit local flows/grafana-dashboard.json   out/grafana.mp4  # a live observability dashboard
+demokit local flows/wikipedia-refused.json   out/nope.mp4     # meant to FAIL: one step proves nothing
+```
+
+`wikipedia-refused.json` is the instructive one: it clicks a control that changes
+nothing, DemoKit reports `outcome: failed`, and no file is written. Live sites drift,
+so a selector may need refreshing; the run tells you which step and why.
+
 ## Troubleshooting
 
 - **`ffmpeg` missing:** npm must allow `ffmpeg-static`'s install script to download
@@ -169,12 +188,19 @@ uploaded by CI.
 
 ## Alternatives and provenance
 
-There are alternatives. [The comparison](docs/ALTERNATIVES.md) covers Cap's
-`cap-demo`, Pagecast, ScreenCI, screencli, OpenScreen and Screen Studio, with primary
-sources and a research date. DemoKit's useful focus is reproducible local flows
-with explicit behavior evidence; that is a design focus, not a claim of exclusivity.
+This is a crowded shelf. [The comparison](docs/ALTERNATIVES.md) covers the tools
+that were cloned and run head-to-head — Vercel Labs' WebReel (Apache-2.0) and
+aidemo (MIT) are the closest — plus Playwright's `recordVideo`, Screen Studio, Loom,
+Skyvern and Browser Use, with primary sources and dates. The one axis DemoKit is
+alone on is verification: three checks per step, and no file when they disagree.
+Everything else — scripted flows, auto-zoom, a rendered cursor, an agent skill — one
+or more of them already do, some of them better. That is a design focus, not a claim
+of exclusivity.
 
-The existing package declares MIT, but `src/caprender.py` explicitly describes a
-port of Cap rendering behavior/code. Cap's relevant source is AGPLv3, outside its
-listed MIT exceptions. This needs a provenance/licensing resolution before another
-release; the audit does **not** certify the current package as cleanly MIT.
+`src/caprender.py` ports Cap's rendering (segment generation, spring solve, cursor
+interpolation, the composite shader's rounding). Cap's MIT exception covers only its
+`cap-camera*` and `scap-*` crates; `crates/rendering` has no override and is AGPLv3.
+DemoKit is therefore **AGPL-3.0-or-later**, and [NOTICE](NOTICE) names every ported
+function and constant against the Cap file it came from. Versions 0.1.0–0.3.0 shipped
+under MIT by mistake and are deprecated on npm; 0.4.0 is the first release under the
+correct licence.
