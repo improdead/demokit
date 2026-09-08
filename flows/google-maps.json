@@ -1,0 +1,40 @@
+{
+  "claim": "Someone who assumes a scripted recorder only works on simple server-rendered pages will believe DemoKit drives one of the heaviest apps on the web - a WebGL map streaming vector tiles into a virtualised result feed - and can still prove what each step put on screen.",
+  "_ledger": [
+    "S0  Google Maps over downtown San Francisco, 16z                 <- where the viewer starts",
+    "S1  every restaurant nearby, pinned on the canvas and listed beside it <- click the Restaurants chip",
+    "S2  the filter sheet: price, rating, hours, cuisine                    <- click All filters"
+  ],
+  "url": "https://www.google.com/maps/@37.7880,-122.4075,16z",
+  "probe": "[role=\"feed\"] a, a.hfpxzc, canvas",
+  "publicPage": true,
+  "layout": [1440, 810],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 9000,
+  "tailMs": 2800,
+  "steps": [
+    { "do": "wait", "ms": 2200 },
+    {
+      "do": "click",
+      "sel": "button:has-text(\"Restaurants\")",
+      "label": "search the map",
+      "shows": "every restaurant nearby - pinned on the canvas, listed beside it",
+      "ms": 6000,
+      "findMs": 20000,
+      "prove": { "textAppears": ["All filters"] },
+      "expect": { "sel": "[role=\"feed\"]", "timeout": 20000 }
+    },
+    {
+      "do": "click",
+      "sel": "button:has-text(\"All filters\")",
+      "label": "open the filters",
+      "shows": "price, rating, opening hours and cuisine, all of it live against the map",
+      "ms": 4200,
+      "findMs": 20000,
+      "prove": { "textAppears": ["Any cuisine", "Open 24 hours"] },
+      "expect": { "sel": "text=Rating at least", "timeout": 15000 },
+      "later": true
+    }
+  ]
+}

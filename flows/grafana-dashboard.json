@@ -1,0 +1,42 @@
+{
+  "claim": "Someone evaluating DemoKit for their own product will believe it can navigate a real observability app - virtualised search, dark theme, panels that only draw once their queries come back - and prove the dashboard it opened is the one it went looking for.",
+  "_ledger": [
+    "S0  Grafana's public playground, the dashboard browser  <- where the viewer starts",
+    "S1  the list filtered down to one match, with its folder and tags <- type \"Business Metrics\"",
+    "S2  the dashboard itself: sign-ups, logins, payments, reviews <- click the result"
+  ],
+  "url": "https://play.grafana.org/dashboards",
+  "probe": "a[href*=\"/d/\"], [data-testid^=\"data-testid Panel header\"]",
+  "publicPage": true,
+  "layout": [1440, 810],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 11000,
+  "tailMs": 2800,
+  "steps": [
+    { "do": "wait", "ms": 1800 },
+    {
+      "do": "type",
+      "sel": "input[placeholder*=\"Search for dashboards\"]",
+      "text": "Business Metrics",
+      "delay": 120,
+      "label": "search the dashboards",
+      "shows": "the list narrowed to one match, with the folder it lives in",
+      "ms": 2600,
+      "findMs": 20000,
+      "settleAfterMs": 2600,
+      "prove": { "textAppears": ["Location"] }
+    },
+    {
+      "do": "click",
+      "sel": "a[href^=\"/d/000000110\"]",
+      "label": "open the dashboard",
+      "shows": "sign-ups, logins, signouts, support calls - every panel drawn from a live query",
+      "ms": 8000,
+      "findMs": 20000,
+      "prove": { "textAppears": ["Customer Activity Dashboard", "Support calls"] },
+      "expect": { "sel": "text=Sign ups", "timeout": 20000 },
+      "later": true
+    }
+  ]
+}
