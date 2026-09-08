@@ -3,10 +3,9 @@
 Script a product workflow, record it locally, and export an edited MP4 with cursor
 motion, zoom, pacing, and evidence that the demonstrated feature worked.
 
-**Release status:** this branch prepares installation and documentation fixes for
-0.3.1. npm currently serves 0.3.0; the new `init`, `skill`, and help commands below
-are not yet published. A renderer licensing/provenance issue must be resolved before
-the next release. See [the audit](docs/AUDIT-2026-09-04.md).
+**Release status:** npm serves **0.4.0**, the first release under the correct licence
+(**AGPL-3.0-or-later** — the renderer is ported from Cap; see [provenance](#alternatives-and-provenance)
+and [NOTICE](NOTICE)). Versions 0.1.0–0.3.0 shipped under MIT by mistake and are deprecated.
 
 DemoKit is a **CLI and an agent skill**, not an MCP server. The default browser path
 uses local headless Chromium. Existing Chrome sessions can use optional Playwriter.
@@ -17,12 +16,10 @@ There is no hosted upload requirement, account, narration, or caption generation
 Requires **Node 20+**, **Python 3 with venv**, and **macOS or Linux**. Windows is not
 supported. Linux may require system browser libraries; see troubleshooting below.
 
-For the current published version:
-
 ```bash
-npm install -g @dekai/demokit@0.3.0
-# Supply your own existing flow; see the linked flow reference.
-demokit local flow.json out/demo.mp4
+npm install -g @dekai/demokit
+# Try one of the bundled public flows, or supply your own; see the flow reference.
+demokit local flows/research-trail.json out/trail.mp4
 ```
 
 To test the improvements in this branch:
