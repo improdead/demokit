@@ -142,6 +142,7 @@ demokit local flows/research-trail.json      out/trail.mp4    # a goal-directed 
 demokit local flows/github-pr.json           out/pr.mp4       # a merged PR: commits, then the diff
 demokit local flows/wikipedia-search.json    out/wiki.mp4     # type a query, open the article
 demokit local flows/google-maps.json         out/maps.mp4     # a WebGL map: pins, then filters
+demokit local flows/maps-directions.json     out/dir.mp4      # a task on that map: A to B, driving, then walking turn-by-turn
 demokit local flows/grafana-dashboard.json   out/grafana.mp4  # a live observability dashboard
 demokit local flows/wikipedia-refused.json   out/nope.mp4     # meant to FAIL: one step proves nothing
 ```

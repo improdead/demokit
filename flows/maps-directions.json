@@ -1,0 +1,43 @@
+{
+  "claim": "An agent was asked how to get from the Ferry Building to the Golden Gate Bridge. Someone watching should believe DemoKit carried out the whole task on real Google Maps - typed both ends, saw the driving routes, then switched to walking and opened the turn-by-turn - and that every state it showed was the real map, not a mock.",
+  "_ledger": [
+    "S0  Google Maps, directions, both boxes empty              <- where the viewer starts",
+    "S1  origin typed: Ferry Building                           <- type + Enter",
+    "S2  destination typed, driving routes drawn                <- type + Enter",
+    "S3  the same trip on foot, ~2 hours                        <- click Walking",
+    "S4  the walking turn-by-turn, step by step                 <- click Details"
+  ],
+  "url": "https://www.google.com/maps/dir/",
+  "probe": "input[aria-label*=\"tarting point\"], input[aria-label*=\"destination\"], [data-travel_mode], canvas",
+  "publicPage": true,
+  "layout": [1440, 810],
+  "zoom": 1,
+  "clearStorage": false,
+  "settleMs": 8000,
+  "tailMs": 3000,
+  "steps": [
+    { "do": "wait", "ms": 1600 },
+    {
+      "do": "type", "sel": "input[aria-label*=\"tarting point\"]", "text": "Ferry Building, San Francisco", "delay": 90,
+      "label": "type where we are", "shows": "the origin resolving against Google's place index",
+      "ms": 1400, "findMs": 20000, "settleAfterMs": 1400, "prove": { "textAppears": ["Ferry Building"] }
+    },
+    { "do": "key", "key": "Enter", "ms": 3000 },
+    {
+      "do": "type", "sel": "input[aria-label*=\"destination\"]", "text": "Golden Gate Bridge", "delay": 90,
+      "label": "type where we are going", "shows": "the destination, and the driving routes appearing",
+      "ms": 1400, "findMs": 20000, "settleAfterMs": 1600, "prove": { "textAppears": ["Golden Gate Bridge"] }, "later": true
+    },
+    { "do": "key", "key": "Enter", "ms": 7000 },
+    {
+      "do": "click", "sel": "[data-travel_mode=\"2\"]",
+      "label": "on foot instead", "shows": "the whole route re-drawn for walking - the better part of two hours",
+      "ms": 6000, "findMs": 20000, "prove": { "changes": false }, "later": true
+    },
+    {
+      "do": "click", "sel": "button:has-text(\"Details\")",
+      "label": "show me every turn", "shows": "the walking turn-by-turn, in order, with distances",
+      "ms": 7000, "findMs": 20000, "prove": { "textAppears": ["Turn right onto"] }, "later": true
+    }
+  ]
+}

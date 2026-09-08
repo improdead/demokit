@@ -1,0 +1,44 @@
+{
+  "claim": "An agent was asked to review an open pull request on my own repo and leave its verdict. Someone watching should believe DemoKit carried the whole review out signed in as me - read the diff, went back to the thread, wrote the review, and posted it - and that the comment genuinely landed, because the last thing on screen is GitHub rendering it in the timeline, not a box DemoKit drew.",
+  "_ledger": [
+    "S0  the open PR, conversation tab, signed in                  <- where the viewer starts",
+    "S1  the diff: index.html and index.css, the old meta description   <- click Files changed",
+    "S2  back to the thread                                       <- click Conversation",
+    "S3  the review typed into the comment box                    <- type",
+    "S4  posted: GitHub renders the comment in the timeline       <- click Comment"
+  ],
+  "url": "https://github.com/improdead/personalwebsite/pull/1",
+  "probe": "a[href$=\"/files\"], #new_comment_field, .timeline-comment",
+  "layout": [1440, 810],
+  "zoom": 1,
+  "settleMs": 3500,
+  "tailMs": 3200,
+  "steps": [
+    { "do": "wait", "ms": 1600 },
+    {
+      "do": "click", "sel": "a:has-text(\"Files changed\")",
+      "label": "read the diff", "shows": "the two files this PR touches, and the meta description it would set",
+      "ms": 4200, "findMs": 15000,
+      "prove": { "textAppears": ["Changes from"] }
+    },
+    {
+      "do": "click", "sel": "a:has-text(\"Conversation\")",
+      "label": "back to the thread", "shows": "the discussion, ready for a review",
+      "ms": 2600, "findMs": 15000,
+      "prove": { "textAppears": ["Reviewers"] }, "later": true
+    },
+    {
+      "do": "type", "sel": "#new_comment_field",
+      "text": "Superseded: the site was fully redesigned after this was opened (paper theme, new copy), and the company is Trident now rather than Esprit, so the meta description this sets is out of date. Recommend closing in favour of main.",
+      "delay": 22,
+      "label": "write the review", "shows": "the verdict going into the comment box",
+      "ms": 1800, "findMs": 15000, "prove": { "changes": false }, "later": true
+    },
+    {
+      "do": "click", "sel": "button:has-text(\"Comment\")",
+      "label": "post it", "shows": "GitHub rendering the comment in the timeline - it landed",
+      "ms": 5000, "findMs": 15000,
+      "prove": { "textAppears": ["Recommend closing in favour of main"] }, "later": true
+    }
+  ]
+}
