@@ -1,0 +1,147 @@
+{
+  "claim": "An agent was told: find a well-reviewed mechanical keyboard and put it in the cart. Someone watching should believe DemoKit carried out the whole errand on the real Amazon - searched, filtered to four stars and up, opened a product, read the reviews, added it, turned down the protection-plan upsell, and ended on a cart with a real subtotal - and that every screen it showed was Amazon's, not a mock.",
+  "_ledger": [
+    "S0  amazon.com, cold                                          <- where the viewer starts",
+    "S1  the search: live suggestions as it types                  <- type",
+    "S2  results, hundreds of them                                 <- click the exact-match suggestion",
+    "S3  filtered to 4 stars and up, a Clear chip appears          <- click the filter",
+    "S4  one keyboard: price, rating, the buy box                  <- click the top result",
+    "S5  what buyers actually say                                  <- scroll to reviews",
+    "S6  back up to the buy box                                    <- scroll",
+    "S7  the protection-plan upsell, the moment most demos hide   <- add to cart",
+    "S8  declined; Added to cart, one item                         <- No thanks",
+    "S9  the cart, with a real subtotal                            <- open the cart"
+  ],
+  "url": "https://www.amazon.com/",
+  "probe": "#twotabsearchtextbox, [data-component-type=\"s-search-result\"], #add-to-cart-button",
+  "publicPage": true,
+  "layout": [
+    1440,
+    810
+  ],
+  "zoom": 1,
+  "clearStorage": true,
+  "settleMs": 3200,
+  "tailMs": 3200,
+  "steps": [
+    {
+      "do": "wait",
+      "ms": 1400
+    },
+    {
+      "do": "type",
+      "sel": "#twotabsearchtextbox",
+      "text": "mechanical keyboard",
+      "delay": 85,
+      "label": "search for it",
+      "shows": "Amazon's live suggestions filling in under the box",
+      "ms": 1400,
+      "findMs": 15000,
+      "settleAfterMs": 1200,
+      "prove": {
+        "changes": false
+      }
+    },
+    {
+      "do": "click",
+      "sel": ".s-suggestion:text-is(\"mechanical keyboard\")",
+      "label": "pick the exact search",
+      "shows": "the results page, hundreds of them",
+      "ms": 3600,
+      "findMs": 15000,
+      "prove": {
+        "urlChanges": true,
+        "textAppears": [
+          "results for"
+        ]
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "a[aria-label*=\"4 Stars & Up\"]",
+      "label": "only the well-reviewed ones",
+      "shows": "the list re-filtered to four stars and up, a Clear chip appearing",
+      "ms": 3600,
+      "findMs": 15000,
+      "prove": {
+        "urlChanges": true,
+        "textAppears": [
+          "Clear"
+        ]
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "[data-component-type=\"s-search-result\"] a.s-line-clamp-2",
+      "label": "open the top one",
+      "shows": "the product: price, rating, the buy box",
+      "ms": 4200,
+      "findMs": 15000,
+      "prove": {
+        "urlChanges": true,
+        "textAppears": [
+          "About this item"
+        ]
+      },
+      "later": true
+    },
+    {
+      "do": "scrollTo",
+      "sel": "#customerReviews",
+      "ms": 2600,
+      "findMs": 15000,
+      "later": true
+    },
+    {
+      "do": "scrollTo",
+      "sel": "#add-to-cart-button",
+      "ms": 1400,
+      "findMs": 15000,
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "#add-to-cart-button",
+      "label": "add it",
+      "shows": "Amazon's protection-plan upsell sliding in - the moment most demos cut",
+      "ms": 3200,
+      "findMs": 15000,
+      "prove": {
+        "changes": false
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "#attachSiNoCoverage",
+      "label": "no thanks",
+      "shows": "the upsell declined, the item added",
+      "ms": 3400,
+      "findMs": 15000,
+      "prove": {
+        "urlChanges": true,
+        "textAppears": [
+          "Added to cart"
+        ]
+      },
+      "later": true
+    },
+    {
+      "do": "click",
+      "sel": "#nav-cart",
+      "label": "look at the cart",
+      "shows": "one item, a real subtotal",
+      "ms": 4200,
+      "findMs": 15000,
+      "prove": {
+        "urlChanges": true,
+        "textAppears": [
+          "Shopping Cart"
+        ]
+      },
+      "later": true
+    }
+  ]
+}

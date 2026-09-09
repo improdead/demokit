@@ -144,6 +144,7 @@ demokit local flows/wikipedia-search.json    out/wiki.mp4     # type a query, op
 demokit local flows/google-maps.json         out/maps.mp4     # a WebGL map: pins, then filters
 demokit local flows/maps-directions.json     out/dir.mp4      # a task on that map: A to B, driving, then walking turn-by-turn
 demokit local flows/grafana-dashboard.json   out/grafana.mp4  # a live observability dashboard
+demokit local flows/amazon-task.json         out/amazon.mp4   # an errand: search, filter 4-star+, read reviews, add to cart, decline the upsell
 demokit local flows/wikipedia-refused.json   out/nope.mp4     # meant to FAIL: one step proves nothing
 ```
 
