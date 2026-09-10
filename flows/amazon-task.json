@@ -10,7 +10,8 @@
     "S6  back up to the buy box                                    <- scroll",
     "S7  the protection-plan upsell, the moment most demos hide   <- add to cart",
     "S8  declined; Added to cart, one item                         <- No thanks",
-    "S9  the cart, with a real subtotal                            <- open the cart"
+    "S9  the cart, with a real subtotal                            <- open the cart",
+    "    redact: the delivery location in the header and the buy box - it is the author's zip"
   ],
   "url": "https://www.amazon.com/",
   "probe": "#twotabsearchtextbox, [data-component-type=\"s-search-result\"], #add-to-cart-button",
@@ -143,5 +144,9 @@
       },
       "later": true
     }
+  ],
+  "redact": [
+    "#nav-global-location-slot",
+    "#cipInsideDeliveryBlock_feature_div"
   ]
 }

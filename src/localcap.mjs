@@ -179,7 +179,18 @@ const css = [`html{zoom:${ZOOM}}`];
 if (flow.hide?.length) css.push(flow.hide.join(',') + '{visibility:hidden !important}');
 if (flow.redact?.length) css.push(flow.redact.join(',') + '{filter:blur(9px) !important}');
 if (flow.stillness !== false) css.push('*,*::before,*::after{scroll-behavior:auto !important}');
-await page.addStyleTag({ content: css.join('\n') });
+// The zoom, hide and redact rules must survive a full navigation, or a
+// multi-page take is only redacted (and only 2x) on its first page. An init
+// script runs at document start for every document this page loads from now
+// on; the style tag covers the document that is already open.
+const cssText = css.join('\n');
+await page.addInitScript(`(() => {
+  const add = () => { const s = document.createElement('style'); s.setAttribute('data-demokit', 'css');
+    s.textContent = ${JSON.stringify(cssText)}; (document.head || document.documentElement).appendChild(s); };
+  try { if (document.documentElement) add(); else document.addEventListener('DOMContentLoaded', add, { once: true }); }
+  catch (e) { document.addEventListener('DOMContentLoaded', add, { once: true }); }
+})()`);
+await page.addStyleTag({ content: cssText });
 await page.waitForTimeout(500);
 
 const loc = (s) => (s.nth == null ? page.locator(s.sel).first() : page.locator(s.sel).nth(s.nth));
