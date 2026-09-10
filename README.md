@@ -3,6 +3,14 @@
 Script a product workflow, record it locally, and export an edited MP4 with cursor
 motion, zoom, pacing, and evidence that the demonstrated feature worked.
 
+<p align="center">
+  <a href="https://dekai.me/demokit"><img src="https://dekai.me/media/amazon-task.gif" width="800" alt="DemoKit driving amazon.com: search, filter to four stars and up, open the top result, add to cart, decline the protection-plan upsell, land on the cart. One take, 7/7 verified."></a>
+</p>
+<p align="center"><sub>
+  <code>demokit local flows/amazon-task.json out/amazon.mp4</code> — an errand on amazon.com, one take, <b>7/7 verified</b>. Nothing here is a fixture.
+  The MP4 is 3840×2160; this is a GIF of it. <a href="https://dekai.me/media/amazon-hero.mp4">Watch the real file</a> · <a href="https://dekai.me/demokit">read the write-up</a>.
+</sub></p>
+
 **Release status:** npm serves **0.4.0**, the first release under the correct licence
 (**AGPL-3.0-or-later** — the renderer is ported from Cap; see [provenance](#alternatives-and-provenance)
 and [NOTICE](NOTICE)). Versions 0.1.0–0.3.0 shipped under MIT by mistake and are deprecated.
@@ -135,6 +143,19 @@ See [rendering notes](docs/rendering.md) for engine differences and units.
 These ship in `flows/` and run with no login — the same recordings shown on the
 [write-up](https://dekai.me/demokit). Each one drives a real, third-party site and
 verifies every step; nothing is a fixture.
+
+<table>
+  <tr>
+    <td width="50%"><a href="https://dekai.me/media/gh-review-long.mp4"><img src="https://dekai.me/media/gh-review-long-poster.jpg" alt="A whole PR review on vercel/next.js"></a><br><sub><b>github-review-long</b> · 8 steps, 42s, one take · <code>8/8 verified</code></sub></td>
+    <td width="50%"><a href="https://dekai.me/media/research-trail.mp4"><img src="https://dekai.me/media/research-trail-poster.jpg" alt="A research trail on Wikipedia"></a><br><sub><b>research-trail</b> · a goal, not a script: Lovelace → the Difference Engine · <code>5/5 verified</code></sub></td>
+  </tr>
+  <tr>
+    <td><a href="https://dekai.me/media/maps-directions.mp4"><img src="https://dekai.me/media/maps-directions-poster.jpg" alt="Directions on Google Maps"></a><br><sub><b>maps-directions</b> · A to B on a WebGL canvas, driving then walking · <code>4/4 verified, twice</code></sub></td>
+    <td><a href="https://dekai.me/media/grafana-dash.mp4"><img src="https://dekai.me/media/grafana-dash-poster.jpg" alt="Grafana's public playground"></a><br><sub><b>grafana-dashboard</b> · dark theme, virtualised search, panels that draw late · <code>2/2 verified</code></sub></td>
+  </tr>
+</table>
+
+<p align="center"><a href="https://dekai.me/media/gh-review-long.mp4"><img src="https://dekai.me/media/gh-review-long.gif" width="800" alt="The 42-second GitHub review take"></a></p>
 
 ```bash
 demokit local flows/github-review-long.json out/review.mp4   # 8 steps, ~42s: a whole PR review
