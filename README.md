@@ -3,13 +3,20 @@
 Script a product workflow, record it locally, and export an edited MP4 with cursor
 motion, zoom, pacing, and evidence that the demonstrated feature worked.
 
-<p align="center">
-  <a href="https://dekai.me/demokit"><img src="https://dekai.me/media/amazon-task.gif" width="800" alt="DemoKit driving amazon.com: search, filter to four stars and up, open the top result, add to cart, decline the protection-plan upsell, land on the cart. One take, 7/7 verified."></a>
-</p>
-<p align="center"><sub>
-  <code>demokit local flows/amazon-task.json out/amazon.mp4</code> — an errand on amazon.com, one take, <b>7/7 verified</b>. Nothing here is a fixture.
-  The MP4 is 3840×2160; this is a GIF of it. <a href="https://dekai.me/media/amazon-hero.mp4">Watch the real file</a> · <a href="https://dekai.me/demokit">read the write-up</a>.
-</sub></p>
+## Watch it work
+
+A real errand on amazon.com — search, filter four stars and up, open the top result, add to cart, decline the protection-plan upsell, land on a cart with a real subtotal. One take, **7/7 verified**. Nothing here is a fixture.
+
+https://github.com/user-attachments/assets/4ba3118d-d564-41d2-9dc8-be7772cfb899
+
+End to end, from the terminal: `demokit local flows/github-review-long.json out/demo.mp4` — the run, the take it produced, and the feature check. A whole PR review on vercel/next.js in one take, **8/8 verified**.
+
+https://github.com/user-attachments/assets/13af4593-ecd8-47a0-ae56-dbe3c8cb2b34
+
+The interesting run is the one that fails. Same tool, one extra beat that clicks the tab the page is already on — two steps prove themselves, the third can't, and there is **no file**.
+
+https://github.com/user-attachments/assets/4a050745-e9e3-47fb-940c-dd83b21a8024
+
 
 **Licence:** **0.4.0** on npm is the first release under the correct licence
 (**AGPL-3.0-or-later** — the renderer is ported from Cap; see [provenance](#alternatives-and-provenance)
