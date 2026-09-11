@@ -30,16 +30,24 @@ export function planSegments({ clicks, duration, keep = 1.35, speed = 4, minIdle
   // the middle unprotected, so a 2.1s stretch inside a held zoom - the pan
   // between two targets - got sped up 4x and the camera lurched. Nothing
   // between the start of a move and its end may be compressed.
-  const windows = clicks
-    .map((c) => (c.fromMs != null
-      ? [Math.max(0, c.fromMs / 1000 - keep), Math.min(duration, c.toMs / 1000 + keep)]
-      : [Math.max(0, c.atMs / 1000 - keep), Math.min(duration, c.atMs / 1000 + keep)]))
-    .sort((a, b) => a[0] - b[0]);
+  // No beats at all - a terminal take with nothing to zoom on, say - means
+  // there is nothing to infer protection FROM. Protect the whole timeline and
+  // let the measured dead air below cut the holes; that is the only evidence
+  // left, and it is the better kind.
+  const windows = clicks.length
+    ? clicks
+      .map((c) => (c.fromMs != null
+        ? [Math.max(0, c.fromMs / 1000 - keep), Math.min(duration, c.toMs / 1000 + keep)]
+        : [Math.max(0, c.atMs / 1000 - keep), Math.min(duration, c.atMs / 1000 + keep)]))
+      .sort((a, b) => a[0] - b[0])
+    : [[0, duration]];
   // The stretch after the LAST beat is the payoff hold, not dead air - resting
   // on the outcome is the point. Speeding it 4x is how a demo ends on a jump
   // cut. Keep it at normal speed up to tailHold, then compress the remainder.
-  const lastEnd = windows[windows.length - 1][1];
-  windows[windows.length - 1][1] = Math.min(duration, Math.max(lastEnd, lastEnd + tailHold - keep));
+  if (clicks.length) {
+    const lastEnd = windows[windows.length - 1][1];
+    windows[windows.length - 1][1] = Math.min(duration, Math.max(lastEnd, lastEnd + tailHold - keep));
+  }
 
   // merge overlapping keep-windows
   const merged = [windows[0]];
