@@ -11,7 +11,7 @@ motion, zoom, pacing, and evidence that the demonstrated feature worked.
   The MP4 is 3840×2160; this is a GIF of it. <a href="https://dekai.me/media/amazon-hero.mp4">Watch the real file</a> · <a href="https://dekai.me/demokit">read the write-up</a>.
 </sub></p>
 
-**Release status:** npm serves **0.4.0**, the first release under the correct licence
+**Licence:** **0.4.0** on npm is the first release under the correct licence
 (**AGPL-3.0-or-later** — the renderer is ported from Cap; see [provenance](#alternatives-and-provenance)
 and [NOTICE](NOTICE)). Versions 0.1.0–0.3.0 shipped under MIT by mistake and are deprecated.
 
@@ -30,38 +30,29 @@ npm install -g @dekai/demokit
 demokit local flows/research-trail.json out/trail.mp4
 ```
 
-To test the improvements in this branch:
+`demokit init` creates a self-contained task-board example if you'd rather start
+from something local; no server, account, fixture download, or API is needed.
+The first recording may download Chromium and install Pillow/numpy into a cached
+Python environment. FFmpeg/ffprobe come from the system or the bundled npm build.
+
+Prefer the source?
 
 ```bash
-git clone --branch codex/demokit-install-audit https://github.com/improdead/demokit.git
-cd demokit
-npm ci
-./bin/demokit --help
-./bin/demokit init
-./bin/demokit local demokit-example/flow.json out/demo.mp4
+git clone https://github.com/improdead/demokit.git && cd demokit && npm ci
+./bin/demokit local flows/amazon-task.json out/amazon.mp4
 ```
-
-`init` creates a self-contained task-board example; no server, account, fixture
-download, or API is needed. Clicking its button actually updates the example UI.
-The first recording may download Chromium and install Pillow/numpy into a cached
-Python environment. Network access and disk space are needed for those downloads.
-FFmpeg/ffprobe are used from the system or installed npm dependencies.
-
-The release-candidate package also supports global installation or
-`npx @dekai/demokit@<released-version>` after publication. Do not assume `npx` of
-0.3.0 has the commands introduced here.
 
 ## Install the agent skill
 
-With this branch's CLI, copy the bundled skill and its references to your agent:
+Copy the bundled skill and its references into your agent:
 
 ```bash
 # Codex; use your configured CODEX_HOME instead if customized
-./bin/demokit skill install ~/.codex/skills/demo-video
+demokit skill install ~/.codex/skills/demo-video
 # Claude Code
-./bin/demokit skill install ~/.claude/skills/demo-video
+demokit skill install ~/.claude/skills/demo-video
 # Cursor
-./bin/demokit skill install ~/.cursor/skills/demo-video
+demokit skill install ~/.cursor/skills/demo-video
 ```
 
 Use `demokit` without `./bin/` after global installation. Existing destination
@@ -75,7 +66,7 @@ Then ask your agent to record a specific workflow and inspect the resulting vide
 ```bash
 demokit probe http://localhost:3000
 demokit local flows/signup.json out/signup.mp4
-# On this branch, omitting `local` is equivalent:
+# Omitting `local` is equivalent:
 demokit flows/signup.json out/signup.mp4
 ```
 
